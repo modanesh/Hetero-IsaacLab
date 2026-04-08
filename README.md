@@ -1,4 +1,4 @@
-![Isaac Lab](docs/source/_static/hetero_isaaclab.jpg)
+![Isaac Lab](docs/source/_static/hetero_isaaclab.gif)
 
 ---
 
