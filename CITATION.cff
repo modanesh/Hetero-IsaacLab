@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite the Hetero-Isaac repository and technical blog post, in addition to the original Isaac Lab."
+title: "Hetero-Isaac: Heterogeneous Quadrupedal Simulation built atop Isaac Lab"
+repository-code: "https://github.com/modanesh/Hetero-IsaacLab"
+type: software
+authors:
+  - family-names: Danesh
+    given-names: Mohamad H.
+identifiers:
+  - type: url
+    value: "https://github.com/modanesh/Hetero-IsaacLab"
+url: "https://modanesh.github.io/blog/hetero-isaaclab"
+license: BSD-3-Clause
+preferred-citation:
+  type: generic
+  title: "Training Morphology-Agnostic Locomotion Policies with Heterogeneous Robotic Environments in Isaac Lab"
+  authors:
+    - family-names: Danesh
+      given-names: Mohamad H.
+  year: 2026
+  url: "https://modanesh.github.io/blog/hetero-isaaclab"
