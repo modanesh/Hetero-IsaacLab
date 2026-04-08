@@ -61,13 +61,12 @@ To train on a specific subset of robots, you can pass the list with the `--quadr
 In addition to Isaac Lab's acknowledgements and citations, please consider citing the Hetero-Isaac repository and technical blog post if you use it in your research:
 
 ```bibtex
-@misc{heteroisaac,
+@software{heteroisaac,
   author = {Danesh, Mohamad H.},
   title     = {Hetero-Isaac: Heterogeneous Quadrupedal Simulation built atop Isaac Lab},
   year      = {2026},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {https://github.com/modanesh/Hetero-IsaacLab},
+  url =  {https://github.com/modanesh/Hetero-IsaacLab},
+  license = {BSD-3-Clause}
 }
 
 @misc{danesh2026heterogeneous,
