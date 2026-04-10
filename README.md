@@ -29,6 +29,9 @@ Most physics simulators and RL frameworks assume homogeneity, making it difficul
 * **Index Mapping System:** Efficient conversion between global environment IDs and robot-local indices.
 * **Comprehensive Domain Randomization:** Handles extreme morphological quirks with flexible reset randomizations (mass, CoM, friction) and interval randomization for external disturbances.
 
+### Training Results and Insights
+For a comprehensive breakdown of these experimental results, including the detailed methodology and the complete set of performance plots, the full report is available in [this WandB report](https://wandb.ai/modanesh/Hetero-Isaac/reports/Hetero-IsaacLab-Experiments--VmlldzoxNjQ4NTMzNw).
+
 ## Getting Started
 
 Our [documentation page](https://modanesh.github.io/blog/hetero-isaaclab) provides everything you need to get started with this framework.
