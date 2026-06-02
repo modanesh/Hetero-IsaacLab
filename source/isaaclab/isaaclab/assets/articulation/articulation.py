@@ -1540,8 +1540,19 @@ class Articulation(AssetBase):
             # Now we convert the found articulation root from the first
             # environment back into a regex that matches all environments.
             first_env_root_prim_path = first_env_root_prims[0].GetPath().pathString
-            root_prim_path_relative_to_prim_path = first_env_root_prim_path[len(first_env_matching_prim_path) :]
-            root_prim_path_expr = self.cfg.prim_path + root_prim_path_relative_to_prim_path
+
+            if isinstance(self.cfg.prim_path, list):
+                # HETEROGENEOUS CASE: self.cfg.prim_path is a list.
+                # We must construct the regex manually from the first found prim path.
+                # Example: "/World/envs/env_0/anymal_d/base" -> "/World/envs/env_.*/anymal_d/base"
+                import re  # Add import here or at the top of the file
+
+                root_prim_path_expr = re.sub(r"env_(\d+)", "env_.*", first_env_root_prim_path)
+            else:
+                # HOMOGENEOUS CASE: self.cfg.prim_path is a string regex.
+                # Original logic is correct here.
+                root_prim_path_relative_to_prim_path = first_env_root_prim_path[len(first_env_matching_prim_path):]
+                root_prim_path_expr = self.cfg.prim_path + root_prim_path_relative_to_prim_path
 
         # -- articulation
         self._root_physx_view = self._physics_sim_view.create_articulation_view(root_prim_path_expr.replace(".*", "*"))

@@ -77,16 +77,30 @@ class AssetBase(ABC):
         # note: currently the spawner does not work if there is a regex pattern in the leaf
         #   For example, if the prim path is "/World/Robot_[1,2]" since the spawner will not
         #   know which prim to spawn. This is a limitation of the spawner and not the asset.
-        asset_path = self.cfg.prim_path.split("/")[-1]
-        asset_path_is_regex = re.match(r"^[a-zA-Z0-9/_]+$", asset_path) is None
-        # spawn the asset
-        if self.cfg.spawn is not None and not asset_path_is_regex:
-            self.cfg.spawn.func(
-                self.cfg.prim_path,
-                self.cfg.spawn,
-                translation=self.cfg.init_state.pos,
-                orientation=self.cfg.init_state.rot,
-            )
+
+        # Handle the case where prim_path is a list for heterogeneous environments
+        if self.cfg.spawn is not None:
+            if isinstance(self.cfg.prim_path, list):
+                # HETEROGENEOUS CASE: prim_path is a list of explicit paths.
+                # We must spawn an instance at each path.
+                for path in self.cfg.prim_path:
+                    self.cfg.spawn.func(
+                        path,
+                        self.cfg.spawn,
+                        translation=self.cfg.init_state.pos,
+                        orientation=self.cfg.init_state.rot,
+                    )
+            else:
+                # Original logic for when prim_path is a single string
+                asset_path = self.cfg.prim_path.split("/")[-1]
+                asset_path_is_regex = re.match(r"^[a-zA-Z0-9/_]+$", asset_path) is None
+                if not asset_path_is_regex:
+                    self.cfg.spawn.func(
+                        self.cfg.prim_path,
+                        self.cfg.spawn,
+                        translation=self.cfg.init_state.pos,
+                        orientation=self.cfg.init_state.rot,
+                    )
         # check that spawn was successful
         matching_prims = sim_utils.find_matching_prims(self.cfg.prim_path)
         if len(matching_prims) == 0:

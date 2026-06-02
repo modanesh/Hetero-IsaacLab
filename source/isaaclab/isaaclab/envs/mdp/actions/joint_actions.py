@@ -190,12 +190,16 @@ class JointPositionAction(JointAction):
     def __init__(self, cfg: actions_cfg.JointPositionActionCfg, env: ManagerBasedEnv):
         # initialize the action term
         super().__init__(cfg, env)
+
+        self.processed_actions_record = []
+
         # use default joint positions as offset
         if cfg.use_default_offset:
             self._offset = self._asset.data.default_joint_pos[:, self._joint_ids].clone()
 
     def apply_actions(self):
         # set position targets
+        self.processed_actions_record.append(self.processed_actions)
         self._asset.set_joint_position_target(self.processed_actions, joint_ids=self._joint_ids)
 
 

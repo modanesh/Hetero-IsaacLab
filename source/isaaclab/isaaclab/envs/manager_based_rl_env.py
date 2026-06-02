@@ -214,7 +214,15 @@ class ManagerBasedRLEnv(ManagerBasedEnv, gym.Env):
 
         # -- reset envs that terminated/timed-out and log the episode information
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+
+        self.extras["final_obs"] = torch.full(
+            (self.num_envs, self.observation_space.spaces['policy'].shape[-1]),
+            float("-inf"),
+            device=self.obs_buf['policy'].device  # keep it on same device
+        )
         if len(reset_env_ids) > 0:
+            self.extras["final_obs"][reset_env_ids] = self.obs_buf['policy'][reset_env_ids]
+
             # trigger recorder terms for pre-reset calls
             self.recorder_manager.record_pre_reset(reset_env_ids)
 

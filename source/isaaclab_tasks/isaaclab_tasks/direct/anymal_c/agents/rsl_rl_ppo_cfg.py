@@ -12,7 +12,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 class AnymalCFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 500
-    save_interval = 50
+    save_interval = 100
     experiment_name = "anymal_c_flat_direct"
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
@@ -42,7 +42,7 @@ class AnymalCFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
 class AnymalCRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 1500
-    save_interval = 50
+    save_interval = 100
     experiment_name = "anymal_c_rough_direct"
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,

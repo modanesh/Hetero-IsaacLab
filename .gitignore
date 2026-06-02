@@ -63,7 +63,6 @@ _build
 
 # Teleop Recorded Dataset
 /datasets/
-
 # Tests
 tests/
 
@@ -73,3 +72,9 @@ tests/
 # TacSL sensor
 **/tactile_record/*
 **/gelsight_r15_data/*
+
+# Virtual Environments
+**/venv/
+wandb
+
+tmp.*

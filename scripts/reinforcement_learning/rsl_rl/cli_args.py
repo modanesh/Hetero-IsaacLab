@@ -22,21 +22,17 @@ def add_rsl_rl_args(parser: argparse.ArgumentParser):
     # create a new argument group
     arg_group = parser.add_argument_group("rsl_rl", description="Arguments for RSL-RL agent.")
     # -- experiment arguments
-    arg_group.add_argument(
-        "--experiment_name", type=str, default=None, help="Name of the experiment folder where logs will be stored."
-    )
+    arg_group.add_argument("--experiment_name", type=str, default=None, help="Name of the experiment folder where logs will be stored.")
     arg_group.add_argument("--run_name", type=str, default=None, help="Run name suffix to the log directory.")
     # -- load arguments
     arg_group.add_argument("--resume", action="store_true", default=False, help="Whether to resume from a checkpoint.")
     arg_group.add_argument("--load_run", type=str, default=None, help="Name of the run folder to resume from.")
     arg_group.add_argument("--checkpoint", type=str, default=None, help="Checkpoint file to resume from.")
     # -- logger arguments
-    arg_group.add_argument(
-        "--logger", type=str, default=None, choices={"wandb", "tensorboard", "neptune"}, help="Logger module to use."
-    )
-    arg_group.add_argument(
-        "--log_project_name", type=str, default=None, help="Name of the logging project when using wandb or neptune."
-    )
+    arg_group.add_argument("--logger", type=str, default="wandb", choices={"wandb", "tensorboard", "neptune"}, help="Logger module to use.")
+    arg_group.add_argument("--log_project_name", type=str, default=None, help="Name of the logging project when using wandb or neptune.")
+    arg_group.add_argument("--log_group_name", type=str, default=None, help="Name of the logging group when using wandb or neptune.")
+    parser.add_argument("--quadrupeds", type=str, default=None, help="Comma-separated list of quadrupeds to use, e.g., 'anymal_d,unitree_a1'.")
 
 
 def parse_rsl_rl_cfg(task_name: str, args_cli: argparse.Namespace) -> RslRlBaseRunnerCfg:
@@ -89,5 +85,7 @@ def update_rsl_rl_cfg(agent_cfg: RslRlBaseRunnerCfg, args_cli: argparse.Namespac
     if agent_cfg.logger in {"wandb", "neptune"} and args_cli.log_project_name:
         agent_cfg.wandb_project = args_cli.log_project_name
         agent_cfg.neptune_project = args_cli.log_project_name
+    if agent_cfg.logger == "wandb" and args_cli.log_group_name:
+        agent_cfg.wandb_group = args_cli.log_group_name
 
     return agent_cfg

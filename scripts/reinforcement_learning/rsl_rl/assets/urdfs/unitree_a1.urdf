@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="a1">
+  <joint name="FL_calf_joint" type="revolute">
+    <origin xyz="0. 0. -0.2" rpy="0. 0. 0."/>
+    <parent link="FL_thigh"/>
+    <child link="FL_calf"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-2.6965334" upper="-0.9162978" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <joint name="FL_foot_fixed" type="fixed">
+    <origin xyz="0. 0. -0.2" rpy="0. 0. -1.5707964"/>
+    <parent link="FL_calf"/>
+    <child link="FL_foot"/>
+  </joint>
+  <joint name="FL_hip_joint" type="revolute">
+    <origin xyz="0.1805 0.047 0. " rpy="0. 0. 0."/>
+    <parent link="a1"/>
+    <child link="FL_hip"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-0.8028514" upper="0.8028514" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <joint name="FL_thigh_joint" type="revolute">
+    <origin xyz="0. 0.0838 0. " rpy="0. 0. 1.5707964"/>
+    <parent link="FL_hip"/>
+    <child link="FL_thigh"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-1.0471976" upper="4.1887902" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <joint name="FR_calf_joint" type="revolute">
+    <origin xyz="-0. 0. -0.2" rpy="0. 0. 0."/>
+    <parent link="FR_thigh"/>
+    <child link="FR_calf"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-2.6965334" upper="-0.9162978" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <joint name="FR_foot_fixed" type="fixed">
+    <origin xyz="0. 0. -0.2" rpy="0. 0. -1.5707964"/>
+    <parent link="FR_calf"/>
+    <child link="FR_foot"/>
+  </joint>
+  <joint name="FR_hip_joint" type="revolute">
+    <origin xyz="0.1805 -0.047 0. " rpy="0. 0. 0."/>
+    <parent link="a1"/>
+    <child link="FR_hip"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-0.8028514" upper="0.8028514" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <joint name="FR_thigh_joint" type="revolute">
+    <origin xyz="0. -0.0838 0. " rpy="0. 0. 1.5707964"/>
+    <parent link="FR_hip"/>
+    <child link="FR_thigh"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-1.0471976" upper="4.1887902" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <joint name="RL_calf_joint" type="revolute">
+    <origin xyz="0. 0. -0.2" rpy="0. 0. 0."/>
+    <parent link="RL_thigh"/>
+    <child link="RL_calf"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-2.6965334" upper="-0.9162978" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <joint name="RL_foot_fixed" type="fixed">
+    <origin xyz="0. 0. -0.2" rpy="0. 0. -1.5707964"/>
+    <parent link="RL_calf"/>
+    <child link="RL_foot"/>
+  </joint>
+  <joint name="RL_hip_joint" type="revolute">
+    <origin xyz="-0.1805 0.047 0. " rpy="0. 0. 0."/>
+    <parent link="a1"/>
+    <child link="RL_hip"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-0.8028514" upper="0.8028514" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <joint name="RL_thigh_joint" type="revolute">
+    <origin xyz="0. 0.0838 0. " rpy="0. 0. 1.5707964"/>
+    <parent link="RL_hip"/>
+    <child link="RL_thigh"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-1.0471976" upper="4.1887902" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <joint name="RR_calf_joint" type="revolute">
+    <origin xyz="-0. 0. -0.2" rpy="0. 0. 0."/>
+    <parent link="RR_thigh"/>
+    <child link="RR_calf"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-2.6965334" upper="-0.9162978" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <joint name="RR_foot_fixed" type="fixed">
+    <origin xyz="0. 0. -0.2" rpy="0. 0. -1.5707964"/>
+    <parent link="RR_calf"/>
+    <child link="RR_foot"/>
+  </joint>
+  <joint name="RR_hip_joint" type="revolute">
+    <origin xyz="-0.1805 -0.047 0. " rpy="0. 0. 0."/>
+    <parent link="a1"/>
+    <child link="RR_hip"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-0.8028514" upper="0.8028514" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <joint name="RR_thigh_joint" type="revolute">
+    <origin xyz="0. -0.0838 0. " rpy="0. 0. 1.5707964"/>
+    <parent link="RR_hip"/>
+    <child link="RR_thigh"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-1.0471976" upper="4.1887902" effort="33.5" velocity="21.000001"/>
+  </joint>
+  <link name="FL_calf">
+    <inertial>
+      <origin xyz="0.006435 0. -0.107388" rpy="0. 0. 0."/>
+      <mass value="0.166"/>
+      <inertia ixx="0.002998" ixy="0." ixz="-0.0001412" iyy="0.003014" iyz="0." izz="0.0000324"/>
+    </inertial>
+  </link>
+  <link name="FL_foot">
+    <inertial>
+      <origin xyz="-inf -inf -inf" rpy="0. 0. 0."/>
+      <mass value="0.06"/>
+      <inertia ixx="0.0000096" ixy="0." ixz="0." iyy="0.0000096" iyz="0." izz="0.0000096"/>
+    </inertial>
+  </link>
+  <link name="FL_hip">
+    <inertial>
+      <origin xyz="-0.003311 0.000635 0.000031" rpy="0. 0. 0."/>
+      <mass value="0.696"/>
+      <inertia ixx="0.0004692" ixy="-0.0000094" ixz="-0.0000003" iyy="0.0008075" iyz="-0.0000005" izz="0.0005529"/>
+    </inertial>
+  </link>
+  <link name="FL_thigh">
+    <inertial>
+      <origin xyz="-0.003237 -0.022327 -0.027326" rpy="0. 0. 0."/>
+      <mass value="1.013"/>
+      <inertia ixx="0.0055291" ixy="0.0000048" ixz="0.0003439" iyy="0.0051393" iyz="0.0000224" izz="0.0013678"/>
+    </inertial>
+  </link>
+  <link name="FR_calf">
+    <inertial>
+      <origin xyz="0.006435 0. -0.107388" rpy="0. 0. 0."/>
+      <mass value="0.166"/>
+      <inertia ixx="0.002998" ixy="0." ixz="-0.0001412" iyy="0.003014" iyz="0." izz="0.0000324"/>
+    </inertial>
+  </link>
+  <link name="FR_foot">
+    <inertial>
+      <origin xyz="-inf -inf -inf" rpy="0. 0. 0."/>
+      <mass value="0.06"/>
+      <inertia ixx="0.0000096" ixy="0." ixz="0." iyy="0.0000096" iyz="0." izz="0.0000096"/>
+    </inertial>
+  </link>
+  <link name="FR_hip">
+    <inertial>
+      <origin xyz="-0.003311 -0.000635 0.000031" rpy="0. 0. 0."/>
+      <mass value="0.696"/>
+      <inertia ixx="0.0004692" ixy="0.0000094" ixz="-0.0000003" iyy="0.0008075" iyz="0.0000005" izz="0.0005529"/>
+    </inertial>
+  </link>
+  <link name="FR_thigh">
+    <inertial>
+      <origin xyz="-0.003237 0.022327 -0.027326" rpy="0. 0. 0."/>
+      <mass value="1.013"/>
+      <inertia ixx="0.0055291" ixy="-0.0000048" ixz="0.0003439" iyy="0.0051393" iyz="-0.0000224" izz="0.0013678"/>
+    </inertial>
+  </link>
+  <link name="RL_calf">
+    <inertial>
+      <origin xyz="0.006435 0. -0.107388" rpy="0. 0. 0."/>
+      <mass value="0.166"/>
+      <inertia ixx="0.002998" ixy="0." ixz="-0.0001412" iyy="0.003014" iyz="0." izz="0.0000324"/>
+    </inertial>
+  </link>
+  <link name="RL_foot">
+    <inertial>
+      <origin xyz="-inf -inf -inf" rpy="0. 0. 0."/>
+      <mass value="0.06"/>
+      <inertia ixx="0.0000096" ixy="0." ixz="0." iyy="0.0000096" iyz="0." izz="0.0000096"/>
+    </inertial>
+  </link>
+  <link name="RL_hip">
+    <inertial>
+      <origin xyz="0.003311 0.000635 0.000031" rpy="0. 0. 0."/>
+      <mass value="0.696"/>
+      <inertia ixx="0.0004692" ixy="0.0000094" ixz="0.0000003" iyy="0.0008075" iyz="-0.0000005" izz="0.0005529"/>
+    </inertial>
+  </link>
+  <link name="RL_thigh">
+    <inertial>
+      <origin xyz="-0.003237 -0.022327 -0.027326" rpy="0. 0. 0."/>
+      <mass value="1.013"/>
+      <inertia ixx="0.0055291" ixy="0.0000048" ixz="0.0003439" iyy="0.0051393" iyz="0.0000224" izz="0.0013678"/>
+    </inertial>
+  </link>
+  <link name="RR_calf">
+    <inertial>
+      <origin xyz="0.006435 0. -0.107388" rpy="0. 0. 0."/>
+      <mass value="0.166"/>
+      <inertia ixx="0.002998" ixy="0." ixz="-0.0001412" iyy="0.003014" iyz="0." izz="0.0000324"/>
+    </inertial>
+  </link>
+  <link name="RR_foot">
+    <inertial>
+      <origin xyz="-inf -inf -inf" rpy="0. 0. 0."/>
+      <mass value="0.06"/>
+      <inertia ixx="0.0000096" ixy="0." ixz="0." iyy="0.0000096" iyz="0." izz="0.0000096"/>
+    </inertial>
+  </link>
+  <link name="RR_hip">
+    <inertial>
+      <origin xyz="0.003311 -0.000635 0.000031" rpy="0. 0. 0."/>
+      <mass value="0.696"/>
+      <inertia ixx="0.0004692" ixy="-0.0000094" ixz="0.0000003" iyy="0.0008075" iyz="0.0000005" izz="0.0005529"/>
+    </inertial>
+  </link>
+  <link name="RR_thigh">
+    <inertial>
+      <origin xyz="-0.003237 0.022327 -0.027326" rpy="0. 0. 0."/>
+      <mass value="1.013"/>
+      <inertia ixx="0.0055291" ixy="-0.0000048" ixz="0.0003439" iyy="0.0051393" iyz="-0.0000224" izz="0.0013678"/>
+    </inertial>
+  </link>
+  <link name="a1"/>
+</robot>

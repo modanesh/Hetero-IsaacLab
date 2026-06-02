@@ -5,6 +5,9 @@
 
 import math
 from dataclasses import MISSING
+from typing import Union
+from dataclasses import field
+
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg

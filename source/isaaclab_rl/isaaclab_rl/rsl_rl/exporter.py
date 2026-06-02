@@ -7,6 +7,7 @@ import copy
 import os
 
 import torch
+import torch.nn as nn
 
 
 def export_policy_as_jit(policy: object, normalizer: object | None, path: str, filename="policy.pt"):
@@ -23,7 +24,7 @@ def export_policy_as_jit(policy: object, normalizer: object | None, path: str, f
 
 
 def export_policy_as_onnx(
-    policy: object, path: str, normalizer: object | None = None, filename="policy.onnx", verbose=False
+        policy: object, path: str, normalizer: object | None = None, filename="policy.onnx", verbose=False
 ):
     """Export policy into a Torch ONNX file.
 

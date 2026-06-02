@@ -239,7 +239,7 @@ def get_all_matching_child_prims(
     return output_prims
 
 
-def find_first_matching_prim(prim_path_regex: str, stage: Usd.Stage | None = None) -> Usd.Prim | None:
+def find_first_matching_prim(prim_path_regex: str | list[str], stage: Usd.Stage | None = None) -> Usd.Prim | None:
     """Find the first matching prim in the stage based on input regex expression.
 
     Args:
@@ -255,6 +255,15 @@ def find_first_matching_prim(prim_path_regex: str, stage: Usd.Stage | None = Non
     # get stage handle
     if stage is None:
         stage = get_current_stage()
+
+    # Handle the case where a list of explicit paths is provided
+    if isinstance(prim_path_regex, list):
+        if len(prim_path_regex) > 0:
+            # The "first match" is simply the prim at the first path in the list.
+            prim = stage.GetPrimAtPath(prim_path_regex[0])
+            return prim if prim.IsValid() else None
+        else:
+            return None # Return None for an empty list
 
     # check prim path is global
     if not prim_path_regex.startswith("/"):
@@ -284,7 +293,7 @@ def _normalize_legacy_wildcard_pattern(prim_path_regex: str) -> str:
     return fixed_regex
 
 
-def find_matching_prims(prim_path_regex: str, stage: Usd.Stage | None = None) -> list[Usd.Prim]:
+def find_matching_prims(prim_path_regex: str | list[str], stage: Usd.Stage | None = None) -> list[Usd.Prim]:
     """Find all the matching prims in the stage based on input regex expression.
 
     Args:
@@ -300,6 +309,15 @@ def find_matching_prims(prim_path_regex: str, stage: Usd.Stage | None = None) ->
     # get stage handle
     if stage is None:
         stage = get_current_stage()
+
+    # Handle the case where a list of explicit paths is provided
+    if isinstance(prim_path_regex, list):
+        output_prims = []
+        for path in prim_path_regex:
+            prim = stage.GetPrimAtPath(path)
+            if prim.IsValid():
+                output_prims.append(prim)
+        return output_prims
 
     # normalize legacy wildcard pattern
     prim_path_regex = _normalize_legacy_wildcard_pattern(prim_path_regex)
@@ -325,7 +343,7 @@ def find_matching_prims(prim_path_regex: str, stage: Usd.Stage | None = None) ->
     return output_prims
 
 
-def find_matching_prim_paths(prim_path_regex: str, stage: Usd.Stage | None = None) -> list[str]:
+def find_matching_prim_paths(prim_path_regex: str | list[str], stage: Usd.Stage | None = None) -> list[str]:
     """Find all the matching prim paths in the stage based on input regex expression.
 
     Args:
@@ -338,6 +356,9 @@ def find_matching_prim_paths(prim_path_regex: str, stage: Usd.Stage | None = Non
     Raises:
         ValueError: If the prim path is not global (i.e: does not start with '/').
     """
+    # Handle the case where a list of explicit paths is provided
+    if isinstance(prim_path_regex, list):
+        return prim_path_regex
     # obtain matching prims
     output_prims = find_matching_prims(prim_path_regex, stage)
     # convert prims to prim paths

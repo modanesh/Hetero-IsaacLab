@@ -14,7 +14,7 @@ from isaaclab_tasks.manager_based.locomotion.velocity.mdp.symmetry import anymal
 class AnymalCRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 1500
-    save_interval = 50
+    save_interval = 100
     experiment_name = "anymal_c_rough"
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,

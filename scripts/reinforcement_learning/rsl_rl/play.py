@@ -18,10 +18,8 @@ import cli_args  # isort: skip
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
-parser.add_argument(
-    "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
-)
+parser.add_argument("--video_length", type=int, default=1000, help="Length of the recorded video (in steps).")
+parser.add_argument("--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations.")
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument(
@@ -34,6 +32,7 @@ parser.add_argument(
     help="Use the pre-trained checkpoint from Nucleus.",
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
+parser.add_argument("--record_trajectory", action="store_true", default=False, help="Record the trajectory of the agent.")
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -132,8 +131,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # set the log directory for the environment (works for all environment types)
     env_cfg.log_dir = log_dir
 
+    gym_make_kwargs = {}
+    if args_cli.quadrupeds:
+        quadrupeds_list = [name.strip() for name in args_cli.quadrupeds.split(',')]
+        gym_make_kwargs["quadrupeds"] = quadrupeds_list
+
     # create isaac environment
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None, **gym_make_kwargs)
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
@@ -169,11 +173,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # export the trained policy to JIT and ONNX formats
     export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
-
     if version.parse(installed_version) >= version.parse("4.0.0"):
         # use the new export functions for rsl-rl >= 4.0.0
-        runner.export_policy_to_jit(path=export_model_dir, filename="policy.pt")
-        runner.export_policy_to_onnx(path=export_model_dir, filename="policy.onnx")
+        runner.export_policy_to_jit(path=export_model_dir, filename=f"policy_{resume_path.split('/')[-2]}.pt")
+        runner.export_policy_to_onnx(path=export_model_dir, filename=f"policy_{resume_path.split('/')[-2]}.onnx")
     else:
         # extract the neural network for rsl-rl < 4.0.0
         if version.parse(installed_version) >= version.parse("2.3.0"):
@@ -190,10 +193,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             normalizer = None
 
         # export to JIT and ONNX
-        export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
-        export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
+        export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename=f"policy_{resume_path.split('/')[-2]}.pt")
+        export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename=f"policy_{resume_path.split('/')[-2]}.onnx")
 
     dt = env.unwrapped.step_dt
+
+    if args_cli.record_trajectory:
+        obs_list, act_list, rew_list, done_list = [], [], [], []
 
     # reset environment
     obs = env.get_observations()
@@ -206,12 +212,24 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             # agent stepping
             actions = policy(obs)
             # env stepping
-            obs, _, dones, _ = env.step(actions)
+            next_obs, rwds, dns, infos = env.step(actions)
             # reset recurrent states for episodes that have terminated
             if version.parse(installed_version) >= version.parse("4.0.0"):
-                policy.reset(dones)
+                policy.reset(dns)
             else:
-                policy_nn.reset(dones)
+                policy_nn.reset(dns)
+
+        if args_cli.record_trajectory:
+            if len(obs_list) >= args_cli.video_length:
+                print(f"[INFO] Reached maximum trajectory length of {args_cli.video_length} steps. Stopping recording.")
+                break
+            obs_list.append(obs)
+            act_list.append(actions)
+            rew_list.append(rwds)
+            done_list.append(dns)
+
+        obs = next_obs
+
         if args_cli.video:
             timestep += 1
             # Exit the play loop after recording one video
@@ -223,8 +241,31 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         if args_cli.real_time and sleep_time > 0:
             time.sleep(sleep_time)
 
+        if len(obs_list) >= 1000:
+            print(f"[INFO] Collected {len(obs_list)} timesteps, stopping the simulation.")
+            break
+
     # close the simulator
     env.close()
+
+    if args_cli.record_trajectory:
+        all_observations = torch.stack(obs_list, dim=0)  # [T, num_envs, obs_dim]
+        all_actions = torch.stack(act_list, dim=0)
+        all_rewards = torch.stack(rew_list, dim=0)
+        all_dones = torch.stack(done_list, dim=0)
+        # save all as a torch tensor in a single pt file
+        print(f"[INFO] Saving trajectories to {export_model_dir}/trajectories_{resume_path.split('/')[-2]}.pt")
+        print(f"[INFO] Observations shape: {all_observations.shape}")
+        torch.save(
+            {
+                "observations": all_observations,
+                "actions": all_actions,
+                "rewards": all_rewards,
+                "dones": all_dones,
+            },
+            os.path.join(export_model_dir, f"trajectories_{resume_path.split('/')[-2]}.pt"),
+        )
+
 
 
 if __name__ == "__main__":

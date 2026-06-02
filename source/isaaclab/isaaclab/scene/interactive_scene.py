@@ -732,7 +732,7 @@ class InteractiveScene:
             if asset_name in InteractiveSceneCfg.__dataclass_fields__ or asset_cfg is None:
                 continue
             # resolve regex
-            if hasattr(asset_cfg, "prim_path"):
+            if hasattr(asset_cfg, "prim_path") and isinstance(asset_cfg.prim_path, str):
                 asset_cfg.prim_path = asset_cfg.prim_path.format(ENV_REGEX_NS=self.env_regex_ns)
             # create asset
             if isinstance(asset_cfg, TerrainImporterCfg):

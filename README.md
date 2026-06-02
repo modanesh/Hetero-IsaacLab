@@ -1,8 +1,8 @@
-![Isaac Lab](docs/source/_static/isaaclab.jpg)
+![Isaac Lab](docs/source/_static/hetero_isaaclab.gif)
 
 ---
 
-# Isaac Lab
+# Hetero-IsaacLab (Fork of Isaac Lab)
 
 [![IsaacSim](https://img.shields.io/badge/IsaacSim-5.1.0-silver.svg)](https://docs.isaacsim.omniverse.nvidia.com/latest/index.html)
 [![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://docs.python.org/3/whatsnew/3.11.html)
@@ -11,49 +11,61 @@
 [![pre-commit](https://img.shields.io/github/actions/workflow/status/isaac-sim/IsaacLab/pre-commit.yaml?logo=pre-commit&logoColor=white&label=pre-commit&color=brightgreen)](https://github.com/isaac-sim/IsaacLab/actions/workflows/pre-commit.yaml)
 [![docs status](https://img.shields.io/github/actions/workflow/status/isaac-sim/IsaacLab/docs.yaml?label=docs&color=brightgreen)](https://github.com/isaac-sim/IsaacLab/actions/workflows/docs.yaml)
 [![License](https://img.shields.io/badge/license-BSD--3-yellow.svg)](https://opensource.org/licenses/BSD-3-Clause)
-[![License](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](https://opensource.org/license/apache-2-0)
 
+**Notice:** This repository is a fork of the main Isaac Lab repo at commit [752be19b](https://github.com/isaac-sim/IsaacLab/tree/752be19bade88c1f1e2a06a1ca6519baafbba216). After that point, all subsequent modifications for heterogeneous training have been consolidated into a single commit to provide a clean, streamlined history.
 
-**Isaac Lab** is a GPU-accelerated, open-source framework designed to unify and simplify robotics research workflows,
-such as reinforcement learning, imitation learning, and motion planning. Built on [NVIDIA Isaac Sim](https://docs.isaacsim.omniverse.nvidia.com/latest/index.html),
-it combines fast and accurate physics and sensor simulation, making it an ideal choice for sim-to-real
-transfer in robotics.
+**Notice:** This project is different from [IsaacLab-HARL](https://github.com/DIRECTLab/IsaacLab-HARL) which focuses on heterogeneous _multi-agent_ learning in Isaac Lab. In this project, we focus on heterogeneous _single-robot_ learning, where each environment contains a single robot but the robots across environments are different. This allows us to train morphology-agnostic policies across multiple quadrupedal robots simultaneously.
 
-Isaac Lab provides developers with a range of essential features for accurate sensor simulation, such as RTX-based
-cameras, LIDAR, or contact sensors. The framework's GPU acceleration enables users to run complex simulations and
-computations faster, which is key for iterative processes like reinforcement learning and data-intensive tasks.
-Moreover, Isaac Lab can run locally or be distributed across the cloud, offering flexibility for large-scale deployments.
+**Isaac Lab** is a GPU-accelerated, open-source framework designed to unify and simplify robotics research workflows, such as reinforcement learning, imitation learning, and motion planning. Built on NVIDIA Isaac Sim, it combines fast and accurate physics and sensor simulation, making it an ideal choice for sim-to-real transfer in robotics.
 
-A detailed description of Isaac Lab can be found in our [arXiv paper](https://arxiv.org/abs/2511.04831).
+## 🤖 Heterogeneous Multi-Robot Training
 
-## Key Features
+This fork introduces **Hetero-IsaacLab**, a specialized architecture for training morphology-agnostic locomotion policies across multiple heterogeneous **quadrupedal** robotic environments simultaneously. 
 
-Isaac Lab offers a comprehensive set of tools and environments designed to facilitate robot learning:
+Most physics simulators and RL frameworks assume homogeneity, making it difficult to train universal controllers. This repository bridges that gap, providing concrete advantages:
+* **Morphology-Agnostic Feature Learning:** The policy is forced to learn fundamental locomotion principles that transcend specific hardware rather than memorizing robot-specific quirks.
+* **Efficient Multi-Platform Deployment:** Training 8 robot types heterogeneously uses the same compute as training 1 robot type, eliminating the need to maintain separate codebases and models.
+* **Better Exploration:** Different morphologies explore different regions of the state-action space naturally (e.g., lighter robots discover high-speed gaits, heavier ones excel at stability).
 
-- **Robots**: A diverse collection of robots, from manipulators, quadrupeds, to humanoids, with more than 16 commonly available models.
-- **Environments**: Ready-to-train implementations of more than 30 environments, which can be trained with popular reinforcement learning frameworks such as RSL RL, SKRL, RL Games, or Stable Baselines. We also support multi-agent reinforcement learning.
-- **Physics**: Rigid bodies, articulated systems, deformable objects
-- **Sensors**: RGB/depth/segmentation cameras, camera annotations, IMU, contact sensors, ray casters.
+### Key Architecture Features
+* **Heterogeneous Configuration System:** Custom config classes with dynamic environment assignment and reward filtering.
+* **Observation & Action Unification:** Enforces an "ANYmal Joint-Major" format, mapping diverse joint orders (e.g., Spot, Unitree) to a standard policy format.
+* **Index Mapping System:** Efficient conversion between global environment IDs and robot-local indices.
+* **Comprehensive Domain Randomization:** Handles extreme morphological quirks with flexible reset randomizations (mass, CoM, friction) and interval randomization for external disturbances.
 
+### Training Results and Insights
+For a comprehensive breakdown of these experimental results, including the detailed methodology and the complete set of performance plots, the full report is available in [this WandB report](https://wandb.ai/modanesh/Hetero-Isaac/reports/Hetero-IsaacLab-Experiments--VmlldzoxNjQ4NTMzNw).
 
 ## Getting Started
 
-### Documentation
+Our [documentation page](https://modanesh.github.io/blog/hetero-isaaclab) provides everything you need to get started with this framework.
 
-Our [documentation page](https://isaac-sim.github.io/IsaacLab) provides everything you need to get started, including
-detailed tutorials and step-by-step guides. Follow these links to learn more about:
+### Installation
+Installation is quite similar to the original Isaac Lab's default installation, cloning this repository instead of the original one.
 
-- [Installation steps](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html#local-installation)
-- [Reinforcement learning](https://isaac-sim.github.io/IsaacLab/main/source/overview/reinforcement-learning/rl_existing_scripts.html)
-- [Tutorials](https://isaac-sim.github.io/IsaacLab/main/source/tutorials/index.html)
-- [Available environments](https://isaac-sim.github.io/IsaacLab/main/source/overview/environments.html)
+```bash
+# Clone Hetero-IsaacLab
+git clone https://github.com/modanesh/Hetero-IsaacLab.git
+cd Hetero-IsaacLab
 
+# Install dependencies (and training modules, eg rsl_rl)
+./isaaclab.sh --install rsl_rl
+````
+
+### Basic Training
+
+To train on a specific subset of robots, you can pass the list with the `--quadrupeds` flag, from the list of available quadrupeds: `anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2,spot`.
+
+```bash
+# Train on all 8 robots with 4096 environments
+./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py \
+    --task=Isaac-Velocity-Flat-HeteroQuadruped-v0 \
+    --quadrupeds anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2,spot
+```
 
 ## Isaac Sim Version Dependency
 
-Isaac Lab is built on top of Isaac Sim and requires specific versions of Isaac Sim that are compatible with each
-release of Isaac Lab. Below, we outline the recent Isaac Lab releases and GitHub branches and their corresponding
-dependency versions for Isaac Sim.
+Isaac Lab is built on top of Isaac Sim and requires specific versions of Isaac Sim that are compatible with each release of Isaac Lab. Below, we outline the recent Isaac Lab releases and GitHub branches and their corresponding dependency versions for Isaac Sim.
 
 | Isaac Lab Version             | Isaac Sim Version         |
 | ----------------------------- | ------------------------- |
@@ -63,69 +75,27 @@ dependency versions for Isaac Sim.
 | `v2.1.X`                      | Isaac Sim 4.5             |
 | `v2.0.X`                      | Isaac Sim 4.5             |
 
-
 ## Contributing to Isaac Lab
 
 We wholeheartedly welcome contributions from the community to make this framework mature and useful for everyone.
 These may happen as bug reports, feature requests, or code contributions. For details, please check our
 [contribution guidelines](https://isaac-sim.github.io/IsaacLab/main/source/refs/contributing.html).
 
-## Show & Tell: Share Your Inspiration
+## Troubleshooting & Support
 
-We encourage you to utilize our [Show & Tell](https://github.com/isaac-sim/IsaacLab/discussions/categories/show-and-tell)
-area in the `Discussions` section of this repository. This space is designed for you to:
-
-* Share the tutorials you've created
-* Showcase your learning content
-* Present exciting projects you've developed
-
-By sharing your work, you'll inspire others and contribute to the collective knowledge
-of our community. Your contributions can spark new ideas and collaborations, fostering
-innovation in robotics and simulation.
-
-## Troubleshooting
-
-Please see the [troubleshooting](https://isaac-sim.github.io/IsaacLab/main/source/refs/troubleshooting.html) section for
-common fixes or [submit an issue](https://github.com/isaac-sim/IsaacLab/issues).
-
-For issues related to Isaac Sim, we recommend checking its [documentation](https://docs.isaacsim.omniverse.nvidia.com/latest/index.html)
-or opening a question on its [forums](https://forums.developer.nvidia.com/c/agx-autonomous-machines/isaac/67).
-
-## Support
-
-* Please use GitHub [Discussions](https://github.com/isaac-sim/IsaacLab/discussions) for discussing ideas,
-  asking questions, and requests for new features.
-* Github [Issues](https://github.com/isaac-sim/IsaacLab/issues) should only be used to track executable pieces of
-  work with a definite scope and a clear deliverable. These can be fixing bugs, documentation issues, new features,
-  or general updates.
-
-## Connect with the NVIDIA Omniverse Community
-
-Do you have a project or resource you'd like to share more widely? We'd love to hear from you!
-Reach out to the NVIDIA Omniverse Community team at OmniverseCommunity@nvidia.com to explore opportunities
-to spotlight your work.
-
-You can also join the conversation on the [Omniverse Discord](https://discord.com/invite/nvidiaomniverse) to
-connect with other developers, share your projects, and help grow a vibrant, collaborative ecosystem
-where creativity and technology intersect. Your contributions can make a meaningful impact on the Isaac Lab
-community and beyond!
+* Please see the [troubleshooting](https://isaac-sim.github.io/IsaacLab/main/source/refs/troubleshooting.html) section for common fixes or [submit an issue](https://github.com/isaac-sim/IsaacLab/issues).
+* For issues related to Isaac Sim, we recommend checking its [documentation](https://docs.omniverse.nvidia.com/app_isaacsim/app_isaacsim/overview.html) or opening a question on its [forums](https://forums.developer.nvidia.com/c/agx-autonomous-machines/isaac/67).
+* Please use GitHub [Discussions](https://github.com/isaac-sim/IsaacLab/discussions) for discussing ideas, asking questions, and requests for new features.
 
 ## License
 
-The Isaac Lab framework is released under [BSD-3 License](LICENSE). The `isaaclab_mimic` extension and its
-corresponding standalone scripts are released under [Apache 2.0](LICENSE-mimic). The license files of its
-dependencies and assets are present in the [`docs/licenses`](docs/licenses) directory.
+The Isaac Lab framework is released under [BSD-3 License](LICENSE). The `isaaclab_mimic` extension and its corresponding standalone scripts are released under [Apache 2.0](LICENSE-mimic). The license files of its dependencies and assets are present in the [`docs/licenses`](docs/licenses) directory.
 
-Note that Isaac Lab requires Isaac Sim, which includes components under proprietary licensing terms. Please see the [Isaac Sim license](docs/licenses/dependencies/isaacsim-license.txt) for information on Isaac Sim licensing.
+## Acknowledgement & Citation
 
-Note that the `isaaclab_mimic` extension requires cuRobo, which has proprietary licensing terms that can be found in [`docs/licenses/dependencies/cuRobo-license.txt`](docs/licenses/dependencies/cuRobo-license.txt).
+If you use Isaac Lab in your research, please cite their technical report:
 
-
-## Citation
-
-If you use Isaac Lab in your research, please cite the technical report:
-
-```
+```bibtex
 @article{mittal2025isaaclab,
   title={Isaac Lab: A GPU-Accelerated Simulation Framework for Multi-Modal Robot Learning},
   author={Mayank Mittal and Pascal Roth and James Tigue and Antoine Richard and Octi Zhang and Peter Du and Antonio Serrano-Muñoz and Xinjie Yao and René Zurbrügg and Nikita Rudin and Lukasz Wawrzyniak and Milad Rakhsha and Alain Denzler and Eric Heiden and Ales Borovicka and Ossama Ahmed and Iretiayo Akinola and Abrar Anwar and Mark T. Carlson and Ji Yuan Feng and Animesh Garg and Renato Gasoto and Lionel Gulich and Yijie Guo and M. Gussert and Alex Hansen and Mihir Kulkarni and Chenran Li and Wei Liu and Viktor Makoviychuk and Grzegorz Malczyk and Hammad Mazhar and Masoud Moghani and Adithyavairavan Murali and Michael Noseworthy and Alexander Poddubny and Nathan Ratliff and Welf Rehberg and Clemens Schwarke and Ritvik Singh and James Latham Smith and Bingjie Tang and Ruchik Thaker and Matthew Trepte and Karl Van Wyk and Fangzhou Yu and Alex Millane and Vikram Ramasamy and Remo Steiner and Sangeeta Subramanian and Clemens Volk and CY Chen and Neel Jawale and Ashwin Varghese Kuruttukulam and Michael A. Lin and Ajay Mandlekar and Karsten Patzwaldt and John Welsh and Huihua Zhao and Fatima Anes and Jean-Francois Lafleche and Nicolas Moënne-Loccoz and Soowan Park and Rob Stepinski and Dirk Van Gelder and Chris Amevor and Jan Carius and Jumyung Chang and Anka He Chen and Pablo de Heras Ciechomski and Gilles Daviet and Mohammad Mohajerani and Julia von Muralt and Viktor Reutskyy and Michael Sauter and Simon Schirm and Eric L. Shi and Pierre Terdiman and Kenny Vilella and Tobias Widmer and Gordon Yeoman and Tiffany Chen and Sergey Grizan and Cathy Li and Lotus Li and Connor Smith and Rafael Wiltz and Kostas Alexis and Yan Chang and David Chu and Linxi "Jim" Fan and Farbod Farshidian and Ankur Handa and Spencer Huang and Marco Hutter and Yashraj Narang and Soha Pouya and Shiwei Sheng and Yuke Zhu and Miles Macklin and Adam Moravanszky and Philipp Reist and Yunrong Guo and David Hoeller and Gavriel State},
@@ -135,7 +105,24 @@ If you use Isaac Lab in your research, please cite the technical report:
 }
 ```
 
-## Acknowledgement
+In addition to Isaac Lab's acknowledgements and citations, please consider citing the Hetero-Isaac repository and technical blog post if you use it in your research:
 
-Isaac Lab development initiated from the [Orbit](https://isaac-orbit.github.io/) framework.
-We gratefully acknowledge the authors of Orbit for their foundational contributions.
+```bibtex
+@software{heteroisaac,
+  author  = {Danesh, Mohamad H.},
+  title   = {Hetero-Isaac: Heterogeneous Quadrupedal Simulation built atop Isaac Lab},
+  year    = {2026},
+  url     = {https://github.com/modanesh/Hetero-IsaacLab},
+  license = {BSD-3-Clause},
+  doi     = {10.5281/zenodo.19488668}
+}
+
+@misc{danesh2026heterogeneous,
+  title        = {Heterogeneous Environments in Isaac Lab},
+  author       = {Danesh, Mohamad H.},
+  year         = {2026},
+  howpublished = {Technical Blog Post},
+  url          = {https://modanesh.github.io/blog/hetero-isaaclab},
+  doi          = {10.17605/OSF.IO/M4DGU}
+}
+```

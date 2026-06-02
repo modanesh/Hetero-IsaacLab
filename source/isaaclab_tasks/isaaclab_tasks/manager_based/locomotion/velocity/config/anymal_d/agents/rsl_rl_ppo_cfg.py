@@ -20,7 +20,7 @@ from isaaclab_tasks.manager_based.locomotion.velocity.mdp.symmetry import anymal
 class AnymalDRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 1500
-    save_interval = 50
+    save_interval = 100
     experiment_name = "anymal_d_rough"
     obs_groups = {"actor": ["policy"], "critic": ["policy"]}
     actor = RslRlMLPModelCfg(
@@ -55,7 +55,7 @@ class AnymalDFlatPPORunnerCfg(AnymalDRoughPPORunnerCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        self.max_iterations = 300
+        self.max_iterations = 500
         self.experiment_name = "anymal_d_flat"
         self.actor.hidden_dims = [128, 128, 128]
         self.critic.hidden_dims = [128, 128, 128]
