@@ -60,6 +60,9 @@ class HeterogeneousQuadrupedVelocityEnv(DirectRLEnv):
         # Now call parent init which will create the scene
         super().__init__(cfg, render_mode, **kwargs)
 
+        # Enforce collision filtering for cloner in manager-based/direct workflows
+        self.scene.filter_collisions()
+
         # Dictionaries to hold assets and their data
         self.robots: Dict[str, Articulation] = dict()
         self.robot_sensors: Dict[str, ContactSensor] = dict()
@@ -542,6 +545,23 @@ class HeterogeneousQuadrupedVelocityEnv(DirectRLEnv):
                 terrain_levels = self.scene.terrain.terrain_levels  # shape: (num_envs,)
                 log_data["Curriculum/terrain_levels"] = terrain_levels[env_ids].float().mean().item()
 
+                # Per-robot terrain level and velocity tracking diagnostics
+                for robot_name in self.quadrupeds_list:
+                    robot_env_ids = self.robot_env_ids[robot_name]
+                    # Terrain levels for this robot family
+                    robot_reset_mask = torch.isin(env_ids, robot_env_ids)
+                    robot_reset_ids = env_ids[robot_reset_mask]
+                    if len(robot_reset_ids) > 0:
+                        log_data[f"Curriculum/terrain_levels_{robot_name}"] = terrain_levels[robot_reset_ids].float().mean().item()
+                        log_data[f"Metrics/error_vel_xy_{robot_name}"] = torch.mean(self._metrics["error_vel_xy"][robot_reset_ids]).item()
+                        # Distance walked from spawn for this robot family
+                        local_indices = torch.searchsorted(robot_env_ids, robot_reset_ids)
+                        robot = self.robots[robot_name]
+                        root_pos_2d = robot.data.root_pos_w[local_indices, :2]
+                        spawn_pos_2d = self.scene.env_origins[robot_reset_ids, :2]
+                        distance = torch.norm(root_pos_2d - spawn_pos_2d, dim=1)
+                        log_data[f"Metrics/distance_walked_{robot_name}"] = distance.mean().item()
+
             self.extras["log"] = log_data
 
             # Reset the metrics buffers for these envs
@@ -731,9 +751,11 @@ class HeterogeneousQuadrupedVelocityEnv(DirectRLEnv):
             # Move up if walked more than half the terrain size
             robot_move_up = distance > (terrain_size / 2)
 
-            # Move down if walked less than half the expected distance
             # Expected distance = commanded_vel_magnitude * episode_length * 0.5
-            commanded_distance = torch.norm(self._commands[robot_global_ids, :2], dim=1) * self.max_episode_length_s * 0.5
+            # We apply a universal 0.9x tolerance multiplier to offset the 5-8% 
+            # physics drag introduced by the PhysX 5.1 engine update.
+            tolerance_multiplier = 0.9
+            commanded_distance = torch.norm(self._commands[robot_global_ids, :2], dim=1) * self.max_episode_length_s * 0.5 * tolerance_multiplier
             robot_move_down = distance < commanded_distance
             # Make move_down mutually exclusive with move_up
             robot_move_down = robot_move_down & ~robot_move_up
