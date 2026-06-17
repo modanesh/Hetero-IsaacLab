@@ -12,7 +12,7 @@
 [![docs status](https://img.shields.io/github/actions/workflow/status/isaac-sim/IsaacLab/docs.yaml?label=docs&color=brightgreen)](https://github.com/isaac-sim/IsaacLab/actions/workflows/docs.yaml)
 [![License](https://img.shields.io/badge/license-BSD--3-yellow.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
-**Notice:** This repository is a fork of the main Isaac Lab repo at commit [752be19b](https://github.com/isaac-sim/IsaacLab/tree/752be19bade88c1f1e2a06a1ca6519baafbba216). After that point, all subsequent modifications for heterogeneous training have been consolidated into a single commit to provide a clean, streamlined history.
+**Notice:** This repository is a fork of the main Isaac Lab repo built on top of upstream commit [84d0ff05](https://github.com/isaac-sim/IsaacLab/tree/84d0ff05a6). Modifications for heterogeneous training are layered directly on top of the core framework, maintaining a clean Git history.
 
 **Notice:** This project is different from [IsaacLab-HARL](https://github.com/DIRECTLab/IsaacLab-HARL) which focuses on heterogeneous _multi-agent_ learning in Isaac Lab. In this project, we focus on heterogeneous _single-robot_ learning, where each environment contains a single robot but the robots across environments are different. This allows us to train morphology-agnostic policies across multiple quadrupedal robots simultaneously.
 
@@ -62,6 +62,22 @@ To train on a specific subset of robots, you can pass the list with the `--quadr
     --task=Isaac-Velocity-Flat-HeteroQuadruped-v0 \
     --quadrupeds anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2,spot
 ```
+
+### Evaluation & Cinematic Video Generation
+
+To evaluate your trained policies and generate high-resolution cinematic videos of all your heterogeneous robots, you can use the `play.py` script. By default, Isaac Lab spans robots widely across the terrain. There is a custom `--cluster_robots` flag that automatically disables the curriculum, clusters all robots into a tight dynamic grid, and overrides the camera to track the pack in 1080p resolution.
+
+```bash
+# Evaluate 14 robots clustered tightly on the 'boxes' terrain in 1080p
+./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/play.py \
+    --task=Isaac-Velocity-Rough-HeteroQuadruped-v0 \
+    --quadrupeds anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2 \
+    --load_run ".*5.1_rough.*" \
+    --num_envs 14 \
+    --video --video_length 1000 --headless \
+    --cluster_robots
+```
+*Note: You can easily change the specific terrain block the robots cluster on by modifying the `target_difficulty_row` and `target_terrain_col` variables directly in `play.py`.*
 
 ## Isaac Sim Version Dependency
 
