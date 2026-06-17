@@ -9,7 +9,7 @@
 
 import argparse
 import sys
-
+import math
 from isaaclab.app import AppLauncher
 
 # local imports
@@ -33,6 +33,7 @@ parser.add_argument(
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
 parser.add_argument("--record_trajectory", action="store_true", default=False, help="Record the trajectory of the agent.")
+parser.add_argument("--cluster_robots", action="store_true", default=False, help="Cluster all robots into a cinematic grid on a specific terrain.")
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -132,9 +133,21 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env_cfg.log_dir = log_dir
 
     gym_make_kwargs = {}
+    first_robot = "anymal_d"  # Default fallback
     if args_cli.quadrupeds:
         quadrupeds_list = [name.strip() for name in args_cli.quadrupeds.split(',')]
         gym_make_kwargs["quadrupeds"] = quadrupeds_list
+        if len(quadrupeds_list) > 0:
+            first_robot = quadrupeds_list[0]
+
+    # Track the first robot dynamically only if clustering is enabled
+    if args_cli.cluster_robots and hasattr(env_cfg, "viewer"):
+        env_cfg.viewer.origin_type = "asset_root"
+        env_cfg.viewer.env_index = 0
+        env_cfg.viewer.asset_name = first_robot
+        env_cfg.viewer.eye = (10.0, 10.0, 10.0)
+        env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
+        env_cfg.viewer.resolution = (1920, 1080)  # 1080p resolution (can also use 3840, 2160 for 4K)
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None, **gym_make_kwargs)
@@ -142,6 +155,55 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
         env = multi_agent_to_single_agent(env)
+
+    # Cleanly cluster all robots around a specific terrain block
+    if args_cli.cluster_robots and args_cli.num_envs and args_cli.num_envs > 1:
+        if hasattr(env.unwrapped, "scene") and hasattr(env.unwrapped.scene, "env_origins"):
+            origins = env.unwrapped.scene.env_origins.clone()
+            
+            # --- TERRAIN SELECTION ---
+            # Columns 0-3: pyramid_stairs
+            # Columns 4-7: pyramid_stairs_inv
+            # Columns 8-11: boxes (vertically shifted cubes)
+            # Columns 12-15: random_rough
+            # Columns 16-17: hf_pyramid_slope
+            # Columns 18-19: hf_pyramid_slope_inv
+            
+            if hasattr(env.unwrapped.scene, "terrain") and hasattr(env.unwrapped.scene.terrain, "terrain_origins"):
+                terrain_origins = env.unwrapped.scene.terrain.terrain_origins
+                
+                if terrain_origins is not None:
+                    # Safely get dimensions to prevent Out Of Bounds errors if the terrain generator changes
+                    max_rows = terrain_origins.shape[0]
+                    max_cols = terrain_origins.shape[1]
+                    
+                    target_difficulty_row = min(3, max_rows - 1)  # 0 to max (0 is flat, max is hardest)
+                    target_terrain_col = min(9, max_cols - 1)     # 8-11 are the boxes!
+                    
+                    base_origin = terrain_origins[target_difficulty_row, target_terrain_col].clone()
+                else:
+                    base_origin = origins[0].clone()
+            else:
+                base_origin = origins[0].clone()
+                
+            # Arrange environments in a dynamic square grid around the chosen terrain block
+            
+            grid_size = math.ceil(math.sqrt(args_cli.num_envs))
+            
+            for i in range(args_cli.num_envs):
+                row = i // grid_size
+                col = i % grid_size
+                origins[i, 0] = base_origin[0] + row * 1.0
+                origins[i, 1] = base_origin[1] + col * 1.0
+                origins[i, 2] = base_origin[2]
+            
+            # Disable curriculum so IsaacLab doesn't overwrite our custom origins during reset
+            if hasattr(env.unwrapped.scene, "terrain") and hasattr(env.unwrapped.scene.terrain, "cfg"):
+                if getattr(env.unwrapped.scene.terrain.cfg, "terrain_generator", None) is not None:
+                    env.unwrapped.scene.terrain.cfg.terrain_generator.curriculum = False
+            
+            env.unwrapped.scene.env_origins[:] = origins
+            env.reset() # Apply the new origins to the simulation
 
     # wrap for video recording
     if args_cli.video:
@@ -241,7 +303,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         if args_cli.real_time and sleep_time > 0:
             time.sleep(sleep_time)
 
-        if len(obs_list) >= 1000:
+        if args_cli.record_trajectory and len(obs_list) >= 1000:
             print(f"[INFO] Collected {len(obs_list)} timesteps, stopping the simulation.")
             break
 
