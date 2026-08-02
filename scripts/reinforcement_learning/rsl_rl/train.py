@@ -173,6 +173,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if args_cli.quadrupeds:
         quadrupeds_list = [name.strip() for name in args_cli.quadrupeds.split(',')]
         gym_make_kwargs["quadrupeds"] = quadrupeds_list
+    if args_cli.humanoids:
+        humanoids_list = [name.strip() for name in args_cli.humanoids.split(',')]
+        gym_make_kwargs["humanoids"] = humanoids_list
+
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None, **gym_make_kwargs)

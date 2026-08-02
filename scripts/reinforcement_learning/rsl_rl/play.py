@@ -139,6 +139,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         gym_make_kwargs["quadrupeds"] = quadrupeds_list
         if len(quadrupeds_list) > 0:
             first_robot = quadrupeds_list[0]
+    elif args_cli.humanoids:
+        humanoids_list = [name.strip() for name in args_cli.humanoids.split(',')]
+        gym_make_kwargs["humanoids"] = humanoids_list
+        if len(humanoids_list) > 0:
+            first_robot = humanoids_list[0]
+
 
     # Track the first robot dynamically only if clustering is enabled
     if args_cli.cluster_robots and hasattr(env_cfg, "viewer"):

@@ -54,14 +54,24 @@ cd Hetero-IsaacLab
 
 ### Basic Training
 
-To train on a specific subset of robots, you can pass the list with the `--quadrupeds` flag, from the list of available quadrupeds: `anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2,spot`.
+To train on a specific subset of quadrupeds, pass the `--quadrupeds` flag from `anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2,spot`:
 
 ```bash
-# Train on all 8 robots with 4096 environments
+# Train on all 8 quadruped robots with 4096 environments
 ./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py \
     --task=Isaac-Velocity-Flat-HeteroQuadruped-v0 \
     --quadrupeds anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2,spot
 ```
+
+To train on heterogeneous **humanoid/biped** robots (`cassie,digit,g1,h1`), pass the `--humanoids` flag:
+
+```bash
+# Train on all 4 humanoid robots with 4096 environments
+./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py \
+    --task=Isaac-Velocity-Flat-HeteroHumanoid-v0 \
+    --humanoids cassie,digit,g1,h1
+```
+
 
 ### Evaluation & Cinematic Video Generation
 
