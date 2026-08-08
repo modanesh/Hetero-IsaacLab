@@ -357,6 +357,11 @@ class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
     scene: HeterogeneousHumanoidSceneCfg = HeterogeneousHumanoidSceneCfg(num_envs=4096, env_spacing=4.0)
 
     domain_randomization: bool = True
+    randomize_friction: bool = True
+    randomize_base_mass: bool = False
+    randomize_base_com: bool = False
+    push_robots: bool = False
+
     observation_noise: ObservationNoiseCfg = ObservationNoiseCfg()
 
     base_mass_range_large: tuple = (-5.0, 5.0)

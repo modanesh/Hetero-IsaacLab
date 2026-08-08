@@ -223,6 +223,9 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
         self._resample_commands()
 
+        # Apply interval domain randomization (e.g. random pushes)
+        self._apply_interval_randomization()
+
         # Process actions (scale + default joint pos)
         self.processed_actions = torch.zeros(self.num_envs, self.cfg.num_actions, device=self.device)
         for robot_name, robot in self.robots.items():
@@ -416,6 +419,10 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         self.episode_length_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
 
+        if self.cfg.domain_randomization:
+            self._elapsed_time[env_ids] = 0.0
+            self._next_push_time[env_ids] = torch.empty(len(env_ids), device=self.device).uniform_(*self._push_interval_s)
+
         if hasattr(self, "reward_manager") and self.reward_manager is not None:
             self.reward_manager.reset(env_ids)
 
@@ -475,11 +482,142 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
     def _apply_startup_randomization(self):
         """Apply startup friction domain randomization."""
+        if not getattr(self.cfg, "randomize_friction", True):
+            return
         print("[INFO - DR] Applying startup friction randomization for humanoids...")
+        if hasattr(self.cfg, "friction_range"):
+            friction_range = self.cfg.friction_range
+        else:
+            friction_range = ((0.8, 0.8), (0.6, 0.6))
+        
+        restitution_range = (0.0, 0.0)
+        num_buckets = 64
+
+        for robot_name, robot in self.robots.items():
+            num_robot_envs = len(self.robot_env_ids[robot_name])
+
+            s_buckets = torch.empty(num_buckets, device="cpu").uniform_(*friction_range[0])
+            d_buckets = torch.empty(num_buckets, device="cpu").uniform_(*friction_range[1])
+            r_buckets = torch.empty(num_buckets, device="cpu").uniform_(*restitution_range)
+
+            bucket_ids = torch.randint(0, num_buckets, (num_robot_envs,), device="cpu")
+
+            static_friction = s_buckets[bucket_ids]
+            dynamic_friction = d_buckets[bucket_ids]
+            restitution = r_buckets[bucket_ids]
+
+            current_materials = robot.root_physx_view.get_material_properties()
+
+            if current_materials.ndim == 2:
+                current_materials[:, 0] = static_friction
+                current_materials[:, 1] = dynamic_friction
+                current_materials[:, 2] = restitution
+            else:
+                current_materials[:, :, 0] = static_friction.unsqueeze(1)
+                current_materials[:, :, 1] = dynamic_friction.unsqueeze(1)
+                current_materials[:, :, 2] = restitution.unsqueeze(1)
+
+            local_env_ids = torch.arange(num_robot_envs, device="cpu", dtype=torch.int32)
+            robot.root_physx_view.set_material_properties(current_materials, indices=local_env_ids)
+            print(f"    [{robot_name}] Randomized friction")
+
+    def _apply_interval_randomization(self):
+        """Apply periodic randomization (push robots)."""
+        if not self.cfg.domain_randomization or not getattr(self.cfg, "push_robots", True):
+            return
+
+        self._elapsed_time += self.step_dt
+        push_mask = self._elapsed_time >= self._next_push_time
+
+        if push_mask.any():
+            for robot_name, robot in self.robots.items():
+                robot_env_ids = self.robot_env_ids[robot_name]
+                robot_push_mask = push_mask[robot_env_ids]
+                if not robot_push_mask.any():
+                    continue
+
+                local_push_indices = torch.where(robot_push_mask)[0]
+                num_to_push = len(local_push_indices)
+                vel_push = torch.zeros(num_to_push, 6, device=self.device)
+                
+                # Push velocities (x, y)
+                vel_push[:, 0].uniform_(-0.5, 0.5)
+                vel_push[:, 1].uniform_(-0.5, 0.5)
+
+                current_vel = robot.data.root_vel_w[local_push_indices].clone()
+                current_vel[:, :2] += vel_push[:, :2]
+
+                robot.write_root_velocity_to_sim(current_vel, env_ids=local_push_indices)
+
+            push_env_ids = torch.where(push_mask)[0]
+            self._elapsed_time[push_env_ids] = 0.0
+            self._next_push_time[push_env_ids] = torch.empty(len(push_env_ids), device=self.device).uniform_(*self._push_interval_s)
 
     def _apply_morphology_randomization(self):
         """Apply mass and CoM randomization."""
+        if not getattr(self.cfg, "randomize_base_mass", True) and not getattr(self.cfg, "randomize_base_com", True):
+            return
+
         print("[INFO - DR] Applying morphology randomization for humanoids...")
+        for robot_name, robot in self.robots.items():
+            num_robot_envs = len(self.robot_env_ids[robot_name])
+            local_env_ids = torch.arange(num_robot_envs, device="cpu")
+
+            is_large_robot = robot_name in ["h1"]
+            base_mass_range = self.cfg.base_mass_range_large if is_large_robot else self.cfg.base_mass_range_small
+            
+            base_link_name = "torso"
+            if robot_name in ROBOT_CONFIGS:
+                base_link_name = ROBOT_CONFIGS[robot_name].base_link
+
+            if getattr(self.cfg, "randomize_base_mass", True):
+                self._randomize_body_masses(robot, robot_name, num_robot_envs, local_env_ids, [base_link_name], base_mass_range)
+            
+            if getattr(self.cfg, "randomize_base_com", True):
+                com_range = {"x": (-0.05, 0.05), "y": (-0.05, 0.05), "z": (-0.01, 0.01)}
+                self._randomize_body_com(robot, robot_name, num_robot_envs, local_env_ids, [base_link_name], com_range)
+
+    def _randomize_body_masses(self, robot, robot_name, num_robot_envs, local_env_ids, base_patterns, base_mass_range):
+        current_masses = robot.root_physx_view.get_masses().clone()
+        default_masses = robot.data.default_mass.clone()
+
+        if current_masses.device.type != 'cpu':
+            current_masses = current_masses.cpu()
+        if default_masses.device.type != 'cpu':
+            default_masses = default_masses.cpu()
+
+        current_masses[:num_robot_envs] = default_masses[:num_robot_envs]
+
+        for body_pattern in base_patterns:
+            try:
+                body_ids, _ = robot.find_bodies(body_pattern)
+                for body_idx in body_ids:
+                    mass_offset = torch.empty(num_robot_envs, device="cpu").uniform_(*base_mass_range)
+                    current_masses[:num_robot_envs, body_idx] += mass_offset
+            except Exception as e:
+                pass
+        current_masses = torch.clamp(current_masses, min=0.01)
+        robot.root_physx_view.set_masses(current_masses, indices=local_env_ids.to(dtype=torch.int32))
+
+    def _randomize_body_com(self, robot, robot_name, num_robot_envs, local_env_ids, base_patterns, com_range):
+        current_coms = robot.root_physx_view.get_coms().clone()
+        if current_coms.device.type != 'cpu':
+            current_coms = current_coms.cpu()
+
+        for body_pattern in base_patterns:
+            try:
+                body_ids, _ = robot.find_bodies(body_pattern)
+                for body_idx in body_ids:
+                    offset_x = torch.empty(num_robot_envs, device="cpu").uniform_(*com_range["x"])
+                    offset_y = torch.empty(num_robot_envs, device="cpu").uniform_(*com_range["y"])
+                    offset_z = torch.empty(num_robot_envs, device="cpu").uniform_(*com_range["z"])
+                    current_coms[:num_robot_envs, body_idx, 0] += offset_x
+                    current_coms[:num_robot_envs, body_idx, 1] += offset_y
+                    current_coms[:num_robot_envs, body_idx, 2] += offset_z
+            except Exception as e:
+                pass
+        
+        robot.root_physx_view.set_coms(current_coms, indices=local_env_ids.to(dtype=torch.int32))
 
     def _apply_reset_randomization(self, env_ids: torch.Tensor):
         """Apply reset pose randomization."""
@@ -496,9 +634,41 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
             joint_pos = robot.data.default_joint_pos[local_indices].clone()
             joint_vel = torch.zeros_like(robot.data.default_joint_vel[local_indices])
+            
+            # Position randomization (scale)
+            pos_mode_attr = f"reset_joint_pos_mode_{robot_name}"
+            position_mode = getattr(self.cfg, pos_mode_attr, "scale")
+            
+            if position_mode == "scale":
+                pos_range_attr = f"reset_joint_pos_range_{robot_name}"
+                position_range = getattr(self.cfg, pos_range_attr, (0.5, 1.5))
+                position_scale = torch.empty(num_resets, robot.num_joints, device=robot.device).uniform_(*position_range)
+                joint_pos = joint_pos * position_scale
+            
+            # Clamp to limits
+            joint_pos_limits = robot.data.soft_joint_pos_limits[local_indices]
+            joint_pos = joint_pos.clamp(joint_pos_limits[..., 0], joint_pos_limits[..., 1])
 
             default_root_state = robot.data.default_root_state[local_indices].clone()
             default_root_state[:, :3] += self.scene.env_origins[robot_global_ids_to_reset]
+            
+            # X, Y offset noise
+            default_root_state[:, 0] += torch.empty(num_resets, device=robot.device).uniform_(-0.5, 0.5)
+            default_root_state[:, 1] += torch.empty(num_resets, device=robot.device).uniform_(-0.5, 0.5)
+
+            # Yaw randomization
+            yaw_noise = torch.empty(num_resets, device=robot.device).uniform_(-3.14, 3.14)
+            cos_yaw = torch.cos(yaw_noise / 2)
+            sin_yaw = torch.sin(yaw_noise / 2)
+            yaw_quat = torch.stack([cos_yaw, torch.zeros_like(cos_yaw), torch.zeros_like(cos_yaw), sin_yaw], dim=-1)
+            default_quat = default_root_state[:, 3:7].clone()
+            default_root_state[:, 3:7] = math_utils.quat_mul(default_quat, yaw_quat)
+            
+            # Velocity noise
+            vel_range_attr = f"reset_base_vel_range_{robot_name}"
+            vel_range = getattr(self.cfg, vel_range_attr, (-0.5, 0.5))
+            default_root_state[:, 7:10].uniform_(*vel_range)
+            default_root_state[:, 10:13].uniform_(*vel_range)
 
             robot.write_root_state_to_sim(default_root_state, env_ids=local_indices)
             robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=local_indices)
