@@ -5,7 +5,7 @@
 
 from isaaclab.utils import configclass
 
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg, RslRlMLPModelCfg
 
 
 @configclass
@@ -15,10 +15,19 @@ class HeterogeneousHumanoidRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     save_interval = 100
     experiment_name = "heterogeneous_humanoid_rough"
     empirical_normalization = False
-    policy = RslRlPpoActorCriticCfg(
-        init_noise_std=1.0,
-        actor_hidden_dims=[512, 256, 128],
-        critic_hidden_dims=[512, 256, 128],
+    actor = RslRlMLPModelCfg(
+        class_name="isaaclab_tasks.direct.hetero_humanoid.masked_mlp_model:MaskedMLPModel",
+        hidden_dims=[512, 256, 128],
+        activation="elu",
+        distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(
+            class_name="GaussianDistribution",
+            init_std=1.0,
+            std_type="scalar",
+        ),
+    )
+    critic = RslRlMLPModelCfg(
+        class_name="MLPModel",
+        hidden_dims=[512, 256, 128],
         activation="elu",
     )
     algorithm = RslRlPpoAlgorithmCfg(
@@ -44,6 +53,6 @@ class HeterogeneousHumanoidFlatPPORunnerCfg(HeterogeneousHumanoidRoughPPORunnerC
 
         self.max_iterations = 3000
         self.experiment_name = "heterogeneous_humanoid_flat"
-        self.policy.actor_hidden_dims = [256, 128, 128]
-        self.policy.critic_hidden_dims = [256, 128, 128]
+        self.actor.hidden_dims = [512, 256, 128]
+        self.critic.hidden_dims = [512, 256, 128]
 

@@ -224,7 +224,7 @@ class RewardsCfg:
     lin_vel_z_l2_digit = RewTerm(func=custom_mdp.lin_vel_z_l2, weight=-2.0, params={"asset_cfg": SceneEntityCfg("digit")})
     ang_vel_xy_l2_digit = RewTerm(func=custom_mdp.ang_vel_xy_l2, weight=-0.1, params={"asset_cfg": SceneEntityCfg("digit")})
     dof_torques_l2_digit = RewTerm(func=custom_mdp.joint_torques_l2, weight=-1.0e-6, params={"asset_cfg": SceneEntityCfg("digit")})
-    dof_acc_l2_digit = RewTerm(func=custom_mdp.joint_acc_l2, weight=-2.0e-7, params={"asset_cfg": SceneEntityCfg("digit")})
+    dof_acc_l2_digit = RewTerm(func=custom_mdp.joint_acc_l2, weight=-2.0e-7, params={"asset_cfg": SceneEntityCfg("digit", joint_names=[".*_hip_roll", ".*_hip_yaw", ".*_hip_pitch", ".*_knee", ".*_toe_a", ".*_toe_b", ".*_arm_.*"])})
     action_rate_l2_digit = RewTerm(func=custom_mdp.action_rate_l2, weight=-0.008, params={"asset_cfg": SceneEntityCfg("digit")})
     feet_air_time_digit = RewTerm(
         func=custom_mdp.feet_air_time_biped, weight=0.25,
@@ -233,7 +233,6 @@ class RewardsCfg:
     flat_orientation_l2_digit = RewTerm(func=custom_mdp.flat_orientation_l2, weight=-2.5, params={"asset_cfg": SceneEntityCfg("digit")})
     feet_slide_digit = RewTerm(func=custom_mdp.feet_slide, weight=-0.25, params={"sensor_cfg": SceneEntityCfg("digit_contacts", body_names=".*_leg_toe_roll"), "asset_cfg": SceneEntityCfg("digit", body_names=".*_leg_toe_roll")})
     dof_pos_limits_digit = RewTerm(func=custom_mdp.joint_pos_limits, weight=-1.0, params={"asset_cfg": SceneEntityCfg("digit", joint_names=[".*_leg_toe_roll", ".*_leg_toe_pitch", ".*_tarsus"])})
-    termination_penalty_digit = RewTerm(func=custom_mdp.is_terminated, weight=-100.0, params={"asset_cfg": SceneEntityCfg("digit")})
     stand_still_digit = RewTerm(
         func=custom_mdp.stand_still_joint_deviation, weight=-0.4,
         params={"command_name": "base_velocity", "command_threshold": 0.06, "asset_cfg": SceneEntityCfg("digit", joint_names=LEG_JOINT_NAMES)}
@@ -245,6 +244,10 @@ class RewardsCfg:
     undesired_contacts_digit = RewTerm(
         func=custom_mdp.undesired_contacts, weight=-0.1,
         params={"sensor_cfg": SceneEntityCfg("digit_contacts", body_names=[".*_rod", ".*_tarsus"]), "threshold": 1.0}
+    )
+    termination_penalty_digit = RewTerm(
+        func=custom_mdp.is_terminated, weight=-100.0,
+        params={"asset_cfg": SceneEntityCfg("digit")}
     )
     joint_deviation_hip_roll_digit = RewTerm(func=custom_mdp.joint_deviation_l1, weight=-0.1, params={"asset_cfg": SceneEntityCfg("digit", joint_names=".*_leg_hip_roll")})
     joint_deviation_hip_yaw_digit = RewTerm(func=custom_mdp.joint_deviation_l1, weight=-0.2, params={"asset_cfg": SceneEntityCfg("digit", joint_names=".*_leg_hip_yaw")})
@@ -272,7 +275,7 @@ class RewardsCfg:
         params={"sensor_cfg": SceneEntityCfg("g1_contacts", body_names=".*_ankle_roll_link"), "command_name": "base_velocity", "threshold": 0.4}
     )
     flat_orientation_l2_g1 = RewTerm(func=custom_mdp.flat_orientation_l2, weight=-1.0, params={"asset_cfg": SceneEntityCfg("g1")})
-    feet_slide_g1 = RewTerm(func=custom_mdp.feet_slide, weight=-0.1, params={"sensor_cfg": SceneEntityCfg("g1_contacts", body_names=".*_ankle_roll_link"), "asset_cfg": SceneEntityCfg("g1")})
+    feet_slide_g1 = RewTerm(func=custom_mdp.feet_slide, weight=-0.1, params={"sensor_cfg": SceneEntityCfg("g1_contacts", body_names=".*_ankle_roll_link"), "asset_cfg": SceneEntityCfg("g1", body_names=".*_ankle_roll_link")})
     dof_pos_limits_g1 = RewTerm(func=custom_mdp.joint_pos_limits, weight=-1.0, params={"asset_cfg": SceneEntityCfg("g1", joint_names=[".*_ankle_pitch_joint", ".*_ankle_roll_joint"])})
     termination_penalty_g1 = RewTerm(func=custom_mdp.is_terminated, weight=-200.0, params={"asset_cfg": SceneEntityCfg("g1")})
     joint_deviation_hip_g1 = RewTerm(func=custom_mdp.joint_deviation_l1, weight=-0.1, params={"asset_cfg": SceneEntityCfg("g1", joint_names=[".*_hip_yaw_joint", ".*_hip_roll_joint"])})
@@ -311,10 +314,14 @@ class RewardsCfg:
 @configclass
 class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
     """Base Configuration for heterogeneous-humanoid velocity-tracking environment."""
+    humanoids: list[str] = ["cassie", "digit", "g1", "h1"]
+    
     episode_length_s = 20.0
     decimation = 4
-    num_actions = 12
-    num_observations = 48
+    # Set to max needed for any humanoid. Can be overridden.
+    num_actions = 64
+    # 12 base + 3 * num_actions (joint_pos, joint_vel, actions)
+    num_observations = 12 + (3 * num_actions)
     num_states = 0
 
     include_height_scanners: bool = False
@@ -408,7 +415,9 @@ class HeterogeneousHumanoidRoughEnvCfg(HeterogeneousHumanoidVelocityEnvCfg):
         self.scene = HeterogeneousHumanoidRoughSceneCfg(num_envs=4096, env_spacing=4.0)
         self.include_height_scanners = True
         self.height_scanner_offset = 0.8
-        self.num_observations = 48 + 187
+        self.num_observations = 12 + (3 * self.num_actions)
+        if getattr(self, "include_height_scanners", False):
+            self.num_observations += 187
         self.observation_space = gym.spaces.Box(
             low=-float("inf"), high=float("inf"), shape=(self.num_observations,), dtype=float
         )

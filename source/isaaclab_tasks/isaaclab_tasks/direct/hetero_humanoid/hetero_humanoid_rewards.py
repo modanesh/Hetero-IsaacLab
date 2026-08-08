@@ -36,24 +36,30 @@ def _resolve_body_ids(asset, cfg: SceneEntityCfg):
     return slice(None)
 
 
+from isaaclab.utils.math import quat_apply_inverse, yaw_quat
+
 def track_lin_vel_xy_exp(env, std: float, command_name: str, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """Reward tracking of linear velocity commands (xy axes) using exponential kernel."""
+    """Reward tracking of linear velocity commands (xy axes) in the gravity aligned robot frame using exponential kernel."""
     asset: RigidObject = env.scene[asset_cfg.name]
     robot_env_ids = get_robot_env_ids(env, asset_cfg)
     reward = torch.zeros(env.num_envs, device=env.device)
     commands = env._commands[robot_env_ids]
-    lin_vel_error = torch.sum(torch.square(commands[:, :2] - asset.data.root_lin_vel_b[:, :2]), dim=1)
+    
+    vel_yaw = quat_apply_inverse(yaw_quat(asset.data.root_quat_w), asset.data.root_lin_vel_w[:, :3])
+    lin_vel_error = torch.sum(torch.square(commands[:, :2] - vel_yaw[:, :2]), dim=1)
+    
     reward[robot_env_ids] = torch.exp(-lin_vel_error / std ** 2)
     return reward
 
 
 def track_ang_vel_z_exp(env, std: float, command_name: str, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """Reward tracking of angular velocity commands (yaw) using exponential kernel."""
+    """Reward tracking of angular velocity commands (yaw) in world frame using exponential kernel."""
     asset: RigidObject = env.scene[asset_cfg.name]
     robot_env_ids = get_robot_env_ids(env, asset_cfg)
     reward = torch.zeros(env.num_envs, device=env.device)
     commands = env._commands[robot_env_ids]
-    ang_vel_error = torch.square(commands[:, 2] - asset.data.root_ang_vel_b[:, 2])
+    
+    ang_vel_error = torch.square(commands[:, 2] - asset.data.root_ang_vel_w[:, 2])
     reward[robot_env_ids] = torch.exp(-ang_vel_error / std ** 2)
     return reward
 
@@ -95,6 +101,8 @@ def feet_air_time_biped(env, sensor_cfg: SceneEntityCfg, command_name: str, thre
     robot_reward = torch.min(torch.where(single_stance.unsqueeze(-1), in_mode_time, 0.0), dim=1)[0]
     robot_reward = torch.clamp(robot_reward, max=threshold)
     
+    
+    
     is_moving = torch.norm(env._commands[robot_env_ids, :2], dim=1) > 0.1
     robot_reward *= is_moving
 
@@ -117,9 +125,11 @@ def feet_slide(env, sensor_cfg: SceneEntityCfg, asset_cfg: SceneEntityCfg) -> to
     robot_env_ids = get_robot_env_ids(env, sensor_cfg)
 
     reward = torch.zeros(env.num_envs, device=env.device)
-    in_contact = contact_sensor.data.net_forces_w[:, sensor_feet_ids, 2] > 1.0
+    in_contact = torch.max(torch.norm(contact_sensor.data.net_forces_w_history[:, :, sensor_feet_ids], dim=-1), dim=1)[0] > 1.0
     feet_vel = torch.norm(asset.data.body_lin_vel_w[:, asset_feet_ids, :2], dim=-1)
-    reward[robot_env_ids] = torch.sum(feet_vel * in_contact, dim=1)
+    
+    robot_reward = torch.sum(feet_vel * in_contact, dim=1)
+    reward[robot_env_ids] = robot_reward
     return reward
 
 
@@ -155,27 +165,39 @@ def joint_acc_l2(env, asset_cfg: SceneEntityCfg) -> torch.Tensor:
 
 def action_rate_l2(env, asset_cfg: SceneEntityCfg = None) -> torch.Tensor:
     """Penalize changes in actions (action rate) across consecutive steps."""
-    reward = torch.sum(torch.square(env.actions - env.previous_actions), dim=1)
+    reward = torch.zeros(env.num_envs, device=env.device)
     if asset_cfg is not None:
         robot_env_ids = get_robot_env_ids(env, asset_cfg)
-        mask = torch.zeros(env.num_envs, device=env.device)
-        mask[robot_env_ids] = 1.0
-        reward = reward * mask
+        robot_name = asset_cfg.name
+        # Remove suffixes like "_contacts" or "_scanner" if present (though asset_cfg should just be the robot name)
+        robot_name = robot_name.replace("_contacts", "").replace("_scanner", "")
+        
+        active_policy = env.active_policy_indices[robot_name]
+        
+        reward[robot_env_ids] = torch.sum(
+            torch.square(env.actions[robot_env_ids][:, active_policy] - env.previous_actions[robot_env_ids][:, active_policy]),
+            dim=1
+        )
     return reward
 
 
 def joint_pos_limits(env, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """Penalize joint positions that move close to their soft joint limits."""
+    """Penalize joint positions if they cross the soft limits.
+    This is computed as a sum of the absolute value of the difference between the joint position and the soft limits.
+    """
     asset: Articulation = env.scene[asset_cfg.name]
     robot_env_ids = get_robot_env_ids(env, asset_cfg)
     reward = torch.zeros(env.num_envs, device=env.device)
 
     ids = _resolve_joint_ids(asset, asset_cfg)
+    
     pos = asset.data.joint_pos[:, ids]
     limits = asset.data.soft_joint_pos_limits[:, ids]
 
-    out_of_limits = (pos < limits[..., 0]) | (pos > limits[..., 1])
-    reward[robot_env_ids] = torch.sum(out_of_limits.float(), dim=1)
+    out_of_limits = -(pos - limits[..., 0]).clip(max=0.0)
+    out_of_limits += (pos - limits[..., 1]).clip(min=0.0)
+
+    reward[robot_env_ids] = torch.sum(out_of_limits, dim=1)
     return reward
 
 
@@ -239,7 +261,7 @@ def undesired_contacts(env, threshold: float, sensor_cfg: SceneEntityCfg) -> tor
     is_contact = torch.max(torch.norm(net_contact_forces[:, :, body_ids], dim=-1), dim=1)[0] > threshold
     
     reward = torch.zeros(env.num_envs, device=env.device)
-    reward[robot_env_ids] = torch.sum(is_contact, dim=1).float()[robot_env_ids]
+    reward[robot_env_ids] = torch.sum(is_contact, dim=1).float()
     return reward
 
 
@@ -255,5 +277,5 @@ def desired_contacts(env, sensor_cfg: SceneEntityCfg, threshold: float = 1.0) ->
     zero_contact = (~contacts).all(dim=1)
     
     reward = torch.zeros(env.num_envs, device=env.device)
-    reward[robot_env_ids] = zero_contact.float()[robot_env_ids]
+    reward[robot_env_ids] = zero_contact.float()
     return reward

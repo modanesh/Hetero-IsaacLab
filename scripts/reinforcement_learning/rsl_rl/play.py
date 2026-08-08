@@ -132,19 +132,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # set the log directory for the environment (works for all environment types)
     env_cfg.log_dir = log_dir
 
-    gym_make_kwargs = {}
     first_robot = "anymal_d"  # Default fallback
     if args_cli.quadrupeds:
         quadrupeds_list = [name.strip() for name in args_cli.quadrupeds.split(',')]
-        gym_make_kwargs["quadrupeds"] = quadrupeds_list
+        if hasattr(env_cfg, "quadrupeds"):
+            env_cfg.quadrupeds = quadrupeds_list
         if len(quadrupeds_list) > 0:
             first_robot = quadrupeds_list[0]
     elif args_cli.humanoids:
         humanoids_list = [name.strip() for name in args_cli.humanoids.split(',')]
-        gym_make_kwargs["humanoids"] = humanoids_list
+        if hasattr(env_cfg, "humanoids"):
+            env_cfg.humanoids = humanoids_list
         if len(humanoids_list) > 0:
             first_robot = humanoids_list[0]
-
 
     # Track the first robot dynamically only if clustering is enabled
     if args_cli.cluster_robots and hasattr(env_cfg, "viewer"):
@@ -156,7 +156,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         env_cfg.viewer.resolution = (1920, 1080)  # 1080p resolution (can also use 3840, 2160 for 4K)
 
     # create isaac environment
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None, **gym_make_kwargs)
+    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
