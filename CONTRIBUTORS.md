@@ -115,6 +115,7 @@ Guidelines for modifications:
 * Mihir Kulkarni
 * Mingxue Gu
 * Mingyu Lee
+* Mohamad Danesh
 * Muhong Guo
 * Narendra Dahile
 * Neel Anand Jawale
@@ -148,6 +149,7 @@ Guidelines for modifications:
 * Shaurya Dewan
 * Sixiang Chen
 * Shundo Kishi
+* Sohaib Kaidali
 * Stefan Van de Mosselaer
 * Stephan Pleines
 * Tiffany Chen
