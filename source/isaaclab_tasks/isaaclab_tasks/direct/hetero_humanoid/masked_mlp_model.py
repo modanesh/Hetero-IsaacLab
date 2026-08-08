@@ -1,5 +1,11 @@
+# Copyright (c) 2022-2026, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 import torch
 from rsl_rl.models.mlp_model import MLPModel
+
 
 class MaskedMLPModel(MLPModel):
     """Custom MLP Model that intercepts continuous action masks from observations
@@ -41,18 +47,18 @@ class MaskedMLPModel(MLPModel):
     def get_output_log_prob(self, outputs: torch.Tensor) -> torch.Tensor:
         # Access the internal torch.distributions.Normal object directly to get unsummed log probs
         unsummed_log_prob = self.distribution._distribution.log_prob(outputs)
-        
+
         if self.current_mask is not None:
             unsummed_log_prob = unsummed_log_prob * self.current_mask
-            
+
         return unsummed_log_prob.sum(dim=-1)
 
     @property
     def output_entropy(self) -> torch.Tensor:
         # Access the internal torch.distributions.Normal object directly to get unsummed entropy
         unsummed_entropy = self.distribution._distribution.entropy()
-        
+
         if self.current_mask is not None:
             unsummed_entropy = unsummed_entropy * self.current_mask
-            
+
         return unsummed_entropy.sum(dim=-1)

@@ -170,10 +170,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env_cfg.log_dir = log_dir
 
     if args_cli.quadrupeds and hasattr(env_cfg, "quadrupeds"):
-        env_cfg.quadrupeds = [name.strip() for name in args_cli.quadrupeds.split(',')]
+        env_cfg.quadrupeds = [name.strip() for name in args_cli.quadrupeds.split(",")]
     if args_cli.humanoids and hasattr(env_cfg, "humanoids"):
-        env_cfg.humanoids = [name.strip() for name in args_cli.humanoids.split(',')]
-
+        env_cfg.humanoids = [name.strip() for name in args_cli.humanoids.split(",")]
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)

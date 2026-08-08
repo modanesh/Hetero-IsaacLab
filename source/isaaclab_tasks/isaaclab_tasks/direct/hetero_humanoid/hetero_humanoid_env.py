@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
+
+import torch
 
 import isaaclab.utils.math as math_utils
-import torch
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.managers import RewardManager
@@ -108,17 +109,17 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         for robot_name, robot in self.robots.items():
             if robot_name not in ROBOT_CONFIGS:
                 raise ValueError(f"Robot '{robot_name}' not found in ROBOT_CONFIGS.")
-                
+
             config = ROBOT_CONFIGS[robot_name]
             joint_names = robot.data.joint_names
-            
+
             active_policy = []
             physical_joints = []
 
             for policy_idx, target_str in enumerate(config.canonical_joints):
                 if target_str is None:
                     continue
-                
+
                 matched_idx = None
                 for idx, jname in enumerate(joint_names):
                     if target_str == jname and idx not in physical_joints:
@@ -130,7 +131,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                         if target_str in jname and idx not in physical_joints:
                             matched_idx = idx
                             break
-                            
+
                 if matched_idx is not None:
                     active_policy.append(policy_idx)
                     physical_joints.append(matched_idx)
@@ -141,9 +142,11 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             # If a robot has fingers that need to be actuated, they should be explicitly defined in canonical_joints.
 
             print(f"[INFO - {robot_name.upper()}] Mapped {len(physical_joints)} joints.")
-            
+
             self.active_policy_indices[robot_name] = torch.tensor(active_policy, dtype=torch.long, device=self.device)
-            self.physical_joint_indices[robot_name] = torch.tensor(physical_joints, dtype=torch.long, device=self.device)
+            self.physical_joint_indices[robot_name] = torch.tensor(
+                physical_joints, dtype=torch.long, device=self.device
+            )
 
             # Define kinematic sign multipliers to align human-legs (G1, H1) with bird-legs (Cassie, Digit)
             signs = torch.ones(len(active_policy), device=self.device)
@@ -156,11 +159,8 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                         jname = joint_names[physical_joints[i]]
                         if "pitch" in jname or "knee" in jname or "ankle" in jname:
                             signs[i] = -1.0
-            
+
             self.joint_signs[robot_name] = signs
-
-
-
 
     def _setup_robot_distribution(self, cfg, active_humanoids: list):
         """Partition num_envs across active humanoids before scene creation."""
@@ -203,7 +203,6 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                     if hasattr(cfg.scene, scanner_name):
                         delattr(cfg.scene, scanner_name)
 
-
     def _filter_rewards(self, cfg, active_humanoids: list):
         """Delete reward terms for inactive robots to prevent SceneEntityCfg resolution errors."""
         attrs_to_delete = []
@@ -213,7 +212,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             for robot in self.all_humanoids:
                 if robot not in active_humanoids and robot in attr_name:
                     attrs_to_delete.append(attr_name)
-        
+
         for attr_name in attrs_to_delete:
             delattr(cfg.rewards, attr_name)
 
@@ -234,15 +233,15 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             phys_idx = self.physical_joint_indices[robot_name]
 
             config_scale = ROBOT_CONFIGS[robot_name].action_scale
-            action_scale = getattr(self.cfg, f"action_scale_{robot_name}", getattr(self.cfg, "action_scale", config_scale))
-            
+            action_scale = getattr(
+                self.cfg, f"action_scale_{robot_name}", getattr(self.cfg, "action_scale", config_scale)
+            )
+
             robot_actions = self.actions[env_ids][:, active_policy]
             scaled_actions = robot_actions * self.joint_signs[robot_name] * action_scale
             default_pos = robot.data.default_joint_pos[:, phys_idx]
-            
-            self.processed_actions[env_ids, :len(active_policy)] = scaled_actions + default_pos
 
-
+            self.processed_actions[env_ids, : len(active_policy)] = scaled_actions + default_pos
 
     def _apply_action(self):
         for robot_name, robot in self.robots.items():
@@ -252,7 +251,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             phys_idx = self.physical_joint_indices[robot_name]
 
             # Write targets ONLY to native actuated joints using the joint_ids parameter
-            targets = self.processed_actions[env_ids, :len(active_policy)]
+            targets = self.processed_actions[env_ids, : len(active_policy)]
             robot.set_joint_position_target(targets, env_ids=local_indices, joint_ids=phys_idx)
 
     def get_action_masks(self) -> torch.Tensor:
@@ -279,13 +278,13 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
             active_policy = self.active_policy_indices[robot_name]
             phys_idx = self.physical_joint_indices[robot_name]
-            
-            raw_joint_pos = (robot.data.joint_pos - robot.data.default_joint_pos)
+
+            raw_joint_pos = robot.data.joint_pos - robot.data.default_joint_pos
             raw_joint_vel = robot.data.joint_vel
 
             joint_pos_rel = raw_joint_pos[:, phys_idx] * self.joint_signs[robot_name]
             joint_vel = raw_joint_vel[:, phys_idx] * self.joint_signs[robot_name]
-            
+
             padded_joint_pos = torch.zeros(len(env_ids), self.cfg.num_actions, device=self.device)
             padded_joint_vel = torch.zeros(len(env_ids), self.cfg.num_actions, device=self.device)
             padded_joint_pos[:, active_policy] = joint_pos_rel
@@ -299,18 +298,31 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                 lin_vel += torch.empty_like(lin_vel).uniform_(*noise_cfg.lin_vel_noise)
                 ang_vel += torch.empty_like(ang_vel).uniform_(*noise_cfg.ang_vel_noise)
                 proj_gravity += torch.empty_like(proj_gravity).uniform_(*noise_cfg.projected_gravity_noise)
-                padded_joint_pos[:, active_policy] += torch.empty_like(joint_pos_rel).uniform_(*noise_cfg.joint_pos_noise)
+                padded_joint_pos[:, active_policy] += torch.empty_like(joint_pos_rel).uniform_(
+                    *noise_cfg.joint_pos_noise
+                )
                 padded_joint_vel[:, active_policy] += torch.empty_like(joint_vel).uniform_(*noise_cfg.joint_vel_noise)
 
-            robot_obs_list = [lin_vel, ang_vel, proj_gravity, commands, padded_joint_pos, padded_joint_vel, padded_actions]
-
+            robot_obs_list = [
+                lin_vel,
+                ang_vel,
+                proj_gravity,
+                commands,
+                padded_joint_pos,
+                padded_joint_vel,
+                padded_actions,
+            ]
 
             if getattr(self.cfg, "include_height_scanners", False):
                 height_scanner = self.robot_scanners[robot_name]
                 hits_z = height_scanner.data.ray_hits_w[..., 2]
-                height_measurements = height_scanner.data.pos_w[:, 2].unsqueeze(1) - hits_z - self.cfg.height_scanner_offset
+                height_measurements = (
+                    height_scanner.data.pos_w[:, 2].unsqueeze(1) - hits_z - self.cfg.height_scanner_offset
+                )
                 if self.cfg.domain_randomization and self.cfg.observation_noise.enabled:
-                    height_measurements += torch.empty_like(height_measurements).uniform_(*self.cfg.observation_noise.height_measurement_noise)
+                    height_measurements += torch.empty_like(height_measurements).uniform_(
+                        *self.cfg.observation_noise.height_measurement_noise
+                    )
                 height_measurements = torch.clip(height_measurements, -1.0, 1.0)
                 robot_obs_list.append(height_measurements)
 
@@ -326,7 +338,6 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         return self.reward_manager.compute(dt=self.step_dt)
 
     def _get_dones(self) -> Tuple[torch.Tensor, torch.Tensor]:
-
         """Check termination conditions for each robot type."""
         time_out = self.episode_length_buf >= self.max_episode_length
         self.termination_results["time_out"][:] = time_out
@@ -334,7 +345,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         for robot_name, sensor in self.robot_sensors.items():
             env_ids = self.robot_env_ids[robot_name]
             net_contact_forces = sensor.data.net_forces_w_history
-            
+
             base_link_name = "torso"
             if robot_name in ROBOT_CONFIGS:
                 base_link_name = ROBOT_CONFIGS[robot_name].base_link
@@ -344,12 +355,13 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             except ValueError:
                 base_link = [0]  # fallback
             terminated_robot = torch.any(
-                torch.max(torch.norm(net_contact_forces[:, :, base_link], dim=-1), dim=1)[0] > self.cfg.contact_threshold,
+                torch.max(torch.norm(net_contact_forces[:, :, base_link], dim=-1), dim=1)[0]
+                > self.cfg.contact_threshold,
                 dim=1,
             )
             base_contact[env_ids] = terminated_robot
         self.termination_results["base_contact"][:] = base_contact
-        
+
         base_orientation = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         for robot_name, robot in self.robots.items():
             if robot_name in ROBOT_CONFIGS:
@@ -361,14 +373,13 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                     projected_gravity_z = torch.clamp(projected_gravity_z, -1.0, 1.0)
                     terminated_robot = torch.acos(-projected_gravity_z).abs() > limit_angle
                     base_orientation[env_ids] = terminated_robot
-        
+
         self.termination_results["base_orientation"][:] = base_orientation
 
         dones = base_contact | base_orientation
         return dones, time_out
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
-
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device)
 
@@ -387,11 +398,13 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                             is_active = False
                         elif len(self.humanoids_list) == 1:
                             # Only strip the suffix if we are isolating a single robot
-                            base_name = term_name[:-(len(robot)+1)]
+                            base_name = term_name[: -(len(robot) + 1)]
                         break
-                
+
                 if is_active:
-                    log_data[f"Episode_Reward/{base_name}"] = torch.mean(term_values[env_ids]).item() / self.cfg.episode_length_s
+                    log_data[f"Episode_Reward/{base_name}"] = (
+                        torch.mean(term_values[env_ids]).item() / self.cfg.episode_length_s
+                    )
 
             for reason, results_tensor in self.termination_results.items():
                 count = torch.count_nonzero(results_tensor[env_ids]).item()
@@ -421,7 +434,9 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
         if self.cfg.domain_randomization:
             self._elapsed_time[env_ids] = 0.0
-            self._next_push_time[env_ids] = torch.empty(len(env_ids), device=self.device).uniform_(*self._push_interval_s)
+            self._next_push_time[env_ids] = torch.empty(len(env_ids), device=self.device).uniform_(
+                *self._push_interval_s
+            )
 
         if hasattr(self, "reward_manager") and self.reward_manager is not None:
             self.reward_manager.reset(env_ids)
@@ -451,7 +466,12 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
             robot_move_up = distance > (terrain_size / 2)
             tolerance_multiplier = 0.9
-            commanded_distance = torch.norm(self._commands[robot_global_ids, :2], dim=1) * self.max_episode_length_s * 0.5 * tolerance_multiplier
+            commanded_distance = (
+                torch.norm(self._commands[robot_global_ids, :2], dim=1)
+                * self.max_episode_length_s
+                * 0.5
+                * tolerance_multiplier
+            )
             robot_move_down = distance < commanded_distance
             robot_move_down = robot_move_down & ~robot_move_up
 
@@ -466,11 +486,19 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
         if len(resample_env_ids) > 0:
             rand_time = torch.empty(len(resample_env_ids), device=self.device).uniform_(*self.cfg.resampling_time_range)
-            self._next_command_resample[resample_env_ids] = self.episode_length_buf[resample_env_ids] + (rand_time / self.step_dt)
+            self._next_command_resample[resample_env_ids] = self.episode_length_buf[resample_env_ids] + (
+                rand_time / self.step_dt
+            )
 
-            r_lin_x = torch.empty(len(resample_env_ids), device=self.device).uniform_(*self.cfg.command_ranges_default["lin_vel_x"])
-            r_lin_y = torch.empty(len(resample_env_ids), device=self.device).uniform_(*self.cfg.command_ranges_default["lin_vel_y"])
-            r_ang_z = torch.empty(len(resample_env_ids), device=self.device).uniform_(*self.cfg.command_ranges_default["ang_vel_z"])
+            r_lin_x = torch.empty(len(resample_env_ids), device=self.device).uniform_(
+                *self.cfg.command_ranges_default["lin_vel_x"]
+            )
+            r_lin_y = torch.empty(len(resample_env_ids), device=self.device).uniform_(
+                *self.cfg.command_ranges_default["lin_vel_y"]
+            )
+            r_ang_z = torch.empty(len(resample_env_ids), device=self.device).uniform_(
+                *self.cfg.command_ranges_default["ang_vel_z"]
+            )
 
             self._commands[resample_env_ids, 0] = r_lin_x
             self._commands[resample_env_ids, 1] = r_lin_y
@@ -489,7 +517,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             friction_range = self.cfg.friction_range
         else:
             friction_range = ((0.8, 0.8), (0.6, 0.6))
-        
+
         restitution_range = (0.0, 0.0)
         num_buckets = 64
 
@@ -539,7 +567,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                 local_push_indices = torch.where(robot_push_mask)[0]
                 num_to_push = len(local_push_indices)
                 vel_push = torch.zeros(num_to_push, 6, device=self.device)
-                
+
                 # Push velocities (x, y)
                 vel_push[:, 0].uniform_(-0.5, 0.5)
                 vel_push[:, 1].uniform_(-0.5, 0.5)
@@ -551,7 +579,9 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
             push_env_ids = torch.where(push_mask)[0]
             self._elapsed_time[push_env_ids] = 0.0
-            self._next_push_time[push_env_ids] = torch.empty(len(push_env_ids), device=self.device).uniform_(*self._push_interval_s)
+            self._next_push_time[push_env_ids] = torch.empty(len(push_env_ids), device=self.device).uniform_(
+                *self._push_interval_s
+            )
 
     def _apply_morphology_randomization(self):
         """Apply mass and CoM randomization."""
@@ -565,14 +595,16 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
             is_large_robot = robot_name in ["h1"]
             base_mass_range = self.cfg.base_mass_range_large if is_large_robot else self.cfg.base_mass_range_small
-            
+
             base_link_name = "torso"
             if robot_name in ROBOT_CONFIGS:
                 base_link_name = ROBOT_CONFIGS[robot_name].base_link
 
             if getattr(self.cfg, "randomize_base_mass", True):
-                self._randomize_body_masses(robot, robot_name, num_robot_envs, local_env_ids, [base_link_name], base_mass_range)
-            
+                self._randomize_body_masses(
+                    robot, robot_name, num_robot_envs, local_env_ids, [base_link_name], base_mass_range
+                )
+
             if getattr(self.cfg, "randomize_base_com", True):
                 com_range = {"x": (-0.05, 0.05), "y": (-0.05, 0.05), "z": (-0.01, 0.01)}
                 self._randomize_body_com(robot, robot_name, num_robot_envs, local_env_ids, [base_link_name], com_range)
@@ -581,9 +613,9 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         current_masses = robot.root_physx_view.get_masses().clone()
         default_masses = robot.data.default_mass.clone()
 
-        if current_masses.device.type != 'cpu':
+        if current_masses.device.type != "cpu":
             current_masses = current_masses.cpu()
-        if default_masses.device.type != 'cpu':
+        if default_masses.device.type != "cpu":
             default_masses = default_masses.cpu()
 
         current_masses[:num_robot_envs] = default_masses[:num_robot_envs]
@@ -594,14 +626,14 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                 for body_idx in body_ids:
                     mass_offset = torch.empty(num_robot_envs, device="cpu").uniform_(*base_mass_range)
                     current_masses[:num_robot_envs, body_idx] += mass_offset
-            except Exception as e:
+            except Exception:
                 pass
         current_masses = torch.clamp(current_masses, min=0.01)
         robot.root_physx_view.set_masses(current_masses, indices=local_env_ids.to(dtype=torch.int32))
 
     def _randomize_body_com(self, robot, robot_name, num_robot_envs, local_env_ids, base_patterns, com_range):
         current_coms = robot.root_physx_view.get_coms().clone()
-        if current_coms.device.type != 'cpu':
+        if current_coms.device.type != "cpu":
             current_coms = current_coms.cpu()
 
         for body_pattern in base_patterns:
@@ -614,9 +646,9 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                     current_coms[:num_robot_envs, body_idx, 0] += offset_x
                     current_coms[:num_robot_envs, body_idx, 1] += offset_y
                     current_coms[:num_robot_envs, body_idx, 2] += offset_z
-            except Exception as e:
+            except Exception:
                 pass
-        
+
         robot.root_physx_view.set_coms(current_coms, indices=local_env_ids.to(dtype=torch.int32))
 
     def _apply_reset_randomization(self, env_ids: torch.Tensor):
@@ -634,24 +666,26 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
             joint_pos = robot.data.default_joint_pos[local_indices].clone()
             joint_vel = torch.zeros_like(robot.data.default_joint_vel[local_indices])
-            
+
             # Position randomization (scale)
             pos_mode_attr = f"reset_joint_pos_mode_{robot_name}"
             position_mode = getattr(self.cfg, pos_mode_attr, "scale")
-            
+
             if position_mode == "scale":
                 pos_range_attr = f"reset_joint_pos_range_{robot_name}"
                 position_range = getattr(self.cfg, pos_range_attr, (0.5, 1.5))
-                position_scale = torch.empty(num_resets, robot.num_joints, device=robot.device).uniform_(*position_range)
+                position_scale = torch.empty(num_resets, robot.num_joints, device=robot.device).uniform_(
+                    *position_range
+                )
                 joint_pos = joint_pos * position_scale
-            
+
             # Clamp to limits
             joint_pos_limits = robot.data.soft_joint_pos_limits[local_indices]
             joint_pos = joint_pos.clamp(joint_pos_limits[..., 0], joint_pos_limits[..., 1])
 
             default_root_state = robot.data.default_root_state[local_indices].clone()
             default_root_state[:, :3] += self.scene.env_origins[robot_global_ids_to_reset]
-            
+
             # X, Y offset noise
             default_root_state[:, 0] += torch.empty(num_resets, device=robot.device).uniform_(-0.5, 0.5)
             default_root_state[:, 1] += torch.empty(num_resets, device=robot.device).uniform_(-0.5, 0.5)
@@ -663,7 +697,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             yaw_quat = torch.stack([cos_yaw, torch.zeros_like(cos_yaw), torch.zeros_like(cos_yaw), sin_yaw], dim=-1)
             default_quat = default_root_state[:, 3:7].clone()
             default_root_state[:, 3:7] = math_utils.quat_mul(default_quat, yaw_quat)
-            
+
             # Velocity noise
             vel_range_attr = f"reset_base_vel_range_{robot_name}"
             vel_range = getattr(self.cfg, vel_range_attr, (-0.5, 0.5))
@@ -714,7 +748,9 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         self.goal_vel_visualizer.visualize(base_pos_w, vel_des_arrow_quat, vel_des_arrow_scale)
         self.current_vel_visualizer.visualize(base_pos_w, vel_arrow_quat, vel_arrow_scale)
 
-    def _resolve_xy_velocity_to_arrow(self, xy_velocity: torch.Tensor, base_quat_w: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _resolve_xy_velocity_to_arrow(
+        self, xy_velocity: torch.Tensor, base_quat_w: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         default_scale = self.goal_vel_visualizer.cfg.markers["arrow"].scale
         arrow_scale = torch.tensor(default_scale, device=self.device).repeat(xy_velocity.shape[0], 1)
         arrow_scale[:, 0] *= torch.linalg.norm(xy_velocity, dim=1) * 3.0
@@ -724,4 +760,3 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         arrow_quat = math_utils.quat_from_euler_xyz(zeros, zeros, heading_angle)
         arrow_quat = math_utils.quat_mul(base_quat_w, arrow_quat)
         return arrow_scale, arrow_quat
-

@@ -5,7 +5,7 @@
 
 from isaaclab.utils import configclass
 
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg, RslRlMLPModelCfg
+from isaaclab_rl.rsl_rl import RslRlMLPModelCfg, RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
 
 
 @configclass
@@ -55,4 +55,3 @@ class HeterogeneousHumanoidFlatPPORunnerCfg(HeterogeneousHumanoidRoughPPORunnerC
         self.experiment_name = "heterogeneous_humanoid_flat"
         self.actor.hidden_dims = [512, 256, 128]
         self.critic.hidden_dims = [512, 256, 128]
-

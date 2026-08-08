@@ -10,4 +10,3 @@ Direct workflow environments.
 import gymnasium as gym
 
 from . import hetero_humanoid, hetero_quadruped
-

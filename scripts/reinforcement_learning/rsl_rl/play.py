@@ -8,8 +8,9 @@
 """Launch Isaac Sim Simulator first."""
 
 import argparse
-import sys
 import math
+import sys
+
 from isaaclab.app import AppLauncher
 
 # local imports
@@ -19,7 +20,9 @@ import cli_args  # isort: skip
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
 parser.add_argument("--video_length", type=int, default=1000, help="Length of the recorded video (in steps).")
-parser.add_argument("--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations.")
+parser.add_argument(
+    "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
+)
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument(
@@ -32,8 +35,15 @@ parser.add_argument(
     help="Use the pre-trained checkpoint from Nucleus.",
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
-parser.add_argument("--record_trajectory", action="store_true", default=False, help="Record the trajectory of the agent.")
-parser.add_argument("--cluster_robots", action="store_true", default=False, help="Cluster all robots into a cinematic grid on a specific terrain.")
+parser.add_argument(
+    "--record_trajectory", action="store_true", default=False, help="Record the trajectory of the agent."
+)
+parser.add_argument(
+    "--cluster_robots",
+    action="store_true",
+    default=False,
+    help="Cluster all robots into a cinematic grid on a specific terrain.",
+)
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -134,13 +144,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     first_robot = "anymal_d"  # Default fallback
     if args_cli.quadrupeds:
-        quadrupeds_list = [name.strip() for name in args_cli.quadrupeds.split(',')]
+        quadrupeds_list = [name.strip() for name in args_cli.quadrupeds.split(",")]
         if hasattr(env_cfg, "quadrupeds"):
             env_cfg.quadrupeds = quadrupeds_list
         if len(quadrupeds_list) > 0:
             first_robot = quadrupeds_list[0]
     elif args_cli.humanoids:
-        humanoids_list = [name.strip() for name in args_cli.humanoids.split(',')]
+        humanoids_list = [name.strip() for name in args_cli.humanoids.split(",")]
         if hasattr(env_cfg, "humanoids"):
             env_cfg.humanoids = humanoids_list
         if len(humanoids_list) > 0:
@@ -166,7 +176,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if args_cli.cluster_robots and args_cli.num_envs and args_cli.num_envs > 1:
         if hasattr(env.unwrapped, "scene") and hasattr(env.unwrapped.scene, "env_origins"):
             origins = env.unwrapped.scene.env_origins.clone()
-            
+
             # --- TERRAIN SELECTION ---
             # Columns 0-3: pyramid_stairs
             # Columns 4-7: pyramid_stairs_inv
@@ -174,42 +184,42 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             # Columns 12-15: random_rough
             # Columns 16-17: hf_pyramid_slope
             # Columns 18-19: hf_pyramid_slope_inv
-            
+
             if hasattr(env.unwrapped.scene, "terrain") and hasattr(env.unwrapped.scene.terrain, "terrain_origins"):
                 terrain_origins = env.unwrapped.scene.terrain.terrain_origins
-                
+
                 if terrain_origins is not None:
                     # Safely get dimensions to prevent Out Of Bounds errors if the terrain generator changes
                     max_rows = terrain_origins.shape[0]
                     max_cols = terrain_origins.shape[1]
-                    
+
                     target_difficulty_row = min(3, max_rows - 1)  # 0 to max (0 is flat, max is hardest)
-                    target_terrain_col = min(9, max_cols - 1)     # 8-11 are the boxes!
-                    
+                    target_terrain_col = min(9, max_cols - 1)  # 8-11 are the boxes!
+
                     base_origin = terrain_origins[target_difficulty_row, target_terrain_col].clone()
                 else:
                     base_origin = origins[0].clone()
             else:
                 base_origin = origins[0].clone()
-                
+
             # Arrange environments in a dynamic square grid around the chosen terrain block
-            
+
             grid_size = math.ceil(math.sqrt(args_cli.num_envs))
-            
+
             for i in range(args_cli.num_envs):
                 row = i // grid_size
                 col = i % grid_size
                 origins[i, 0] = base_origin[0] + row * 1.0
                 origins[i, 1] = base_origin[1] + col * 1.0
                 origins[i, 2] = base_origin[2]
-            
+
             # Disable curriculum so IsaacLab doesn't overwrite our custom origins during reset
             if hasattr(env.unwrapped.scene, "terrain") and hasattr(env.unwrapped.scene.terrain, "cfg"):
                 if getattr(env.unwrapped.scene.terrain.cfg, "terrain_generator", None) is not None:
                     env.unwrapped.scene.terrain.cfg.terrain_generator.curriculum = False
-            
+
             env.unwrapped.scene.env_origins[:] = origins
-            env.reset() # Apply the new origins to the simulation
+            env.reset()  # Apply the new origins to the simulation
 
     # wrap for video recording
     if args_cli.video:
@@ -261,8 +271,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             normalizer = None
 
         # export to JIT and ONNX
-        export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename=f"policy_{resume_path.split('/')[-2]}.pt")
-        export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename=f"policy_{resume_path.split('/')[-2]}.onnx")
+        export_policy_as_jit(
+            policy_nn, normalizer=normalizer, path=export_model_dir, filename=f"policy_{resume_path.split('/')[-2]}.pt"
+        )
+        export_policy_as_onnx(
+            policy_nn,
+            normalizer=normalizer,
+            path=export_model_dir,
+            filename=f"policy_{resume_path.split('/')[-2]}.onnx",
+        )
 
     dt = env.unwrapped.step_dt
 
@@ -333,7 +350,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             },
             os.path.join(export_model_dir, f"trajectories_{resume_path.split('/')[-2]}.pt"),
         )
-
 
 
 if __name__ == "__main__":
