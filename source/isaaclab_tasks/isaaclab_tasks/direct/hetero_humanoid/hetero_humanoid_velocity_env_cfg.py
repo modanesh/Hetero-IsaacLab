@@ -27,6 +27,7 @@ from isaaclab_assets.robots.agility import DIGIT_V4_CFG, LEG_JOINT_NAMES
 # Humanoid Robot Assets
 from isaaclab_assets.robots.cassie import CASSIE_CFG
 from isaaclab_assets.robots.unitree import G1_MINIMAL_CFG, H1_MINIMAL_CFG
+
 from .robot_configs import ROBOT_CONFIGS
 
 ##
