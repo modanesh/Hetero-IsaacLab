@@ -27,6 +27,7 @@ from isaaclab_assets.robots.agility import DIGIT_V4_CFG, LEG_JOINT_NAMES
 # Humanoid Robot Assets
 from isaaclab_assets.robots.cassie import CASSIE_CFG
 from isaaclab_assets.robots.unitree import G1_MINIMAL_CFG, H1_MINIMAL_CFG
+from .robot_configs import ROBOT_CONFIGS
 
 ##
 # Custom Configuration Classes for Heterogeneous Setups
@@ -117,7 +118,7 @@ class HeterogeneousHumanoidSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/cassie/.*", history_length=3, track_air_time=True
     )
     digit_contacts: HeterogeneousSensorCfg = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/digit/.*", history_length=3, track_air_time=True
+        prim_path="{ENV_REGEX_NS}/digit/.*", history_length=4, update_period=0.005, track_air_time=True
     )
     g1_contacts: HeterogeneousSensorCfg = ContactSensorCfg(
         prim_path="{ENV_REGEX_NS}/g1/.*", history_length=3, track_air_time=True
@@ -533,8 +534,8 @@ class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
 
     episode_length_s = 20.0
     decimation = 4
-    # Set to max needed for any humanoid. Can be overridden.
-    num_actions = 64
+    # Set to max needed for any humanoid. Calculated dynamically from ROBOT_CONFIGS.
+    num_actions = max(len(cfg.canonical_joints) for cfg in ROBOT_CONFIGS.values())
     # 12 base + 3 * num_actions (joint_pos, joint_vel, actions)
     num_observations = 12 + (3 * num_actions)
     num_states = 0
@@ -570,14 +571,15 @@ class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
 
     domain_randomization: bool = True
     randomize_friction: bool = True
-    randomize_base_mass: bool = False
+    randomize_base_mass: bool = True
     randomize_base_com: bool = False
-    push_robots: bool = False
+    push_robots: bool = True
 
     observation_noise: ObservationNoiseCfg = ObservationNoiseCfg()
 
     base_mass_range_large: tuple = (-5.0, 5.0)
     base_mass_range_small: tuple = (-2.0, 2.0)
+    base_mass_range_digit: tuple = (-5.0, 5.0)
 
     reset_base_vel_range_cassie: tuple = (0.0, 0.0)
     reset_base_vel_range_digit: tuple = (-0.5, 0.5)
@@ -599,12 +601,63 @@ class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
     resampling_time_range: tuple = (10.0, 10.0)
     standing_probability: float = 0.1
     heading_control_stiffness: float = 0.5
-    heading_mode_probability: float = 0.0
+    heading_mode_probability: float = 1.0
 
     command_ranges_default: dict = {
         "lin_vel_x": (-1.0, 1.0),
+        "lin_vel_y": (-1.0, 1.0),
+        "ang_vel_z": (-1.0, 1.0),
+        "heading": (-math.pi, math.pi),
+    }
+
+    # Per-robot overrides
+    # -- Digit
+    resampling_time_range_digit: tuple = (3.0, 8.0)
+    standing_probability_digit: float = 0.1
+    randomize_base_mass_digit: bool = True
+    base_mass_range_digit: tuple = (-5.0, 5.0)
+    push_robots_digit: bool = True
+    command_ranges_digit: dict = {
+        "lin_vel_x": (-0.8, 0.8),
         "lin_vel_y": (-0.5, 0.5),
         "ang_vel_z": (-1.0, 1.0),
+        "heading": (-math.pi, math.pi),
+    }
+
+    # -- Cassie
+    resampling_time_range_cassie: tuple = (10.0, 10.0)
+    standing_probability_cassie: float = 0.02
+    randomize_base_mass_cassie: bool = False
+    push_robots_cassie: bool = False
+    command_ranges_cassie: dict = {
+        "lin_vel_x": (-1.0, 1.0),
+        "lin_vel_y": (-1.0, 1.0),
+        "ang_vel_z": (-1.0, 1.0),
+        "heading": (-math.pi, math.pi),
+    }
+
+    # -- G1
+    resampling_time_range_g1: tuple = (10.0, 10.0)
+    standing_probability_g1: float = 0.02
+    randomize_base_mass_g1: bool = False
+    push_robots_g1: bool = False
+    command_ranges_g1: dict = {
+        "lin_vel_x": (0.0, 1.0),
+        "lin_vel_y": (-0.5, 0.5),
+        "ang_vel_z": (-1.0, 1.0),
+        "heading": (-math.pi, math.pi),
+    }
+
+    # -- H1
+    resampling_time_range_h1: tuple = (10.0, 10.0)
+    standing_probability_h1: float = 0.02
+    randomize_base_mass_h1: bool = False
+    push_robots_h1: bool = False
+    command_ranges_h1: dict = {
+        "lin_vel_x": (0.0, 1.0),
+        "lin_vel_y": (0.0, 0.0),
+        "ang_vel_z": (-1.0, 1.0),
+        "heading": (-math.pi, math.pi),
     }
 
     rewards: RewardsCfg = RewardsCfg()

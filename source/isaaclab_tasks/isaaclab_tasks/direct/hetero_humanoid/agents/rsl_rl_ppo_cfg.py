@@ -34,7 +34,7 @@ class HeterogeneousHumanoidRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
-        entropy_coef=0.005,
+        entropy_coef=0.01,
         num_learning_epochs=5,
         num_mini_batches=4,
         learning_rate=1.0e-3,
@@ -53,5 +53,3 @@ class HeterogeneousHumanoidFlatPPORunnerCfg(HeterogeneousHumanoidRoughPPORunnerC
 
         self.max_iterations = 3000
         self.experiment_name = "heterogeneous_humanoid_flat"
-        self.actor.hidden_dims = [512, 256, 128]
-        self.critic.hidden_dims = [512, 256, 128]

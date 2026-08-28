@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Dict, Tuple
 
+import math
 import torch
 
 import isaaclab.utils.math as math_utils
@@ -221,6 +222,34 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         self.actions = actions.clone()
 
         self._resample_commands()
+
+        # Update angular velocity from heading error for heading envs
+        if self._is_heading_env.any():
+            for robot_name, robot in self.robots.items():
+                robot_env_ids_all = self.robot_env_ids[robot_name]
+                mask = self._is_heading_env[robot_env_ids_all]
+                heading_ids = robot_env_ids_all[mask]
+
+                if len(heading_ids) == 0:
+                    continue
+
+                local_indices = torch.searchsorted(robot_env_ids_all, heading_ids)
+
+                yaw = robot.data.heading_w[local_indices]
+                heading_error = math_utils.wrap_to_pi(self._heading_target[heading_ids] - yaw)
+
+                stiffness = getattr(self.cfg, f"heading_control_stiffness_{robot_name}", self.cfg.heading_control_stiffness)
+                ang_vel_z = stiffness * heading_error
+
+                command_ranges = getattr(self.cfg, f"command_ranges_{robot_name}", self.cfg.command_ranges_default)
+                min_z, max_z = command_ranges["ang_vel_z"]
+                ang_vel_z = torch.clamp(ang_vel_z, min_z, max_z)
+
+                self._commands[heading_ids, 2] = ang_vel_z
+
+        # Enforce zero command for standing envs
+        if self._is_standing_env.any():
+            self._commands[self._is_standing_env, :] = 0.0
 
         # Apply interval domain randomization (e.g. random pushes)
         self._apply_interval_randomization()
@@ -485,28 +514,43 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         resample_env_ids = torch.nonzero(resample_mask, as_tuple=False).flatten()
 
         if len(resample_env_ids) > 0:
-            rand_time = torch.empty(len(resample_env_ids), device=self.device).uniform_(*self.cfg.resampling_time_range)
-            self._next_command_resample[resample_env_ids] = self.episode_length_buf[resample_env_ids] + (
-                rand_time / self.step_dt
-            )
+            for robot_name, robot in self.robots.items():
+                robot_env_ids_all = self.robot_env_ids[robot_name]
+                mask = torch.isin(resample_env_ids, robot_env_ids_all)
+                robot_resample_env_ids = resample_env_ids[mask]
 
-            r_lin_x = torch.empty(len(resample_env_ids), device=self.device).uniform_(
-                *self.cfg.command_ranges_default["lin_vel_x"]
-            )
-            r_lin_y = torch.empty(len(resample_env_ids), device=self.device).uniform_(
-                *self.cfg.command_ranges_default["lin_vel_y"]
-            )
-            r_ang_z = torch.empty(len(resample_env_ids), device=self.device).uniform_(
-                *self.cfg.command_ranges_default["ang_vel_z"]
-            )
+                if len(robot_resample_env_ids) == 0:
+                    continue
 
-            self._commands[resample_env_ids, 0] = r_lin_x
-            self._commands[resample_env_ids, 1] = r_lin_y
-            self._commands[resample_env_ids, 2] = r_ang_z
+                resampling_time_range = getattr(self.cfg, f"resampling_time_range_{robot_name}", self.cfg.resampling_time_range)
+                command_ranges = getattr(self.cfg, f"command_ranges_{robot_name}", self.cfg.command_ranges_default)
+                standing_prob = getattr(self.cfg, f"standing_probability_{robot_name}", self.cfg.standing_probability)
+                heading_prob = getattr(self.cfg, f"heading_mode_probability_{robot_name}", self.cfg.heading_mode_probability)
 
-            is_standing = torch.rand(len(resample_env_ids), device=self.device) < self.cfg.standing_probability
-            self._is_standing_env[resample_env_ids] = is_standing
-            self._commands[resample_env_ids[is_standing], :] = 0.0
+                rand_time = torch.empty(len(robot_resample_env_ids), device=self.device).uniform_(*resampling_time_range)
+                self._next_command_resample[robot_resample_env_ids] = self.episode_length_buf[robot_resample_env_ids] + (
+                    rand_time / self.step_dt
+                )
+
+                r_lin_x = torch.empty(len(robot_resample_env_ids), device=self.device).uniform_(*command_ranges["lin_vel_x"])
+                r_lin_y = torch.empty(len(robot_resample_env_ids), device=self.device).uniform_(*command_ranges["lin_vel_y"])
+
+                self._commands[robot_resample_env_ids, 0] = r_lin_x
+                self._commands[robot_resample_env_ids, 1] = r_lin_y
+
+                is_heading = torch.rand(len(robot_resample_env_ids), device=self.device) < heading_prob
+                self._is_heading_env[robot_resample_env_ids] = is_heading
+
+                heading_range = command_ranges.get("heading", (-math.pi, math.pi))
+                self._heading_target[robot_resample_env_ids[is_heading]] = torch.empty(is_heading.sum(), device=self.device).uniform_(*heading_range)
+
+                not_heading = ~is_heading
+                r_ang_z = torch.empty(not_heading.sum(), device=self.device).uniform_(*command_ranges["ang_vel_z"])
+                self._commands[robot_resample_env_ids[not_heading], 2] = r_ang_z
+
+                is_standing = torch.rand(len(robot_resample_env_ids), device=self.device) < standing_prob
+                self._is_standing_env[robot_resample_env_ids] = is_standing
+                self._commands[robot_resample_env_ids[is_standing], :] = 0.0
 
     def _apply_startup_randomization(self):
         """Apply startup friction domain randomization."""
@@ -551,14 +595,15 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
     def _apply_interval_randomization(self):
         """Apply periodic randomization (push robots)."""
-        if not self.cfg.domain_randomization or not getattr(self.cfg, "push_robots", True):
-            return
-
         self._elapsed_time += self.step_dt
         push_mask = self._elapsed_time >= self._next_push_time
 
         if push_mask.any():
             for robot_name, robot in self.robots.items():
+                push_enabled = getattr(self.cfg, f"push_robots_{robot_name}", getattr(self.cfg, "push_robots", True))
+                if not push_enabled:
+                    continue
+
                 robot_env_ids = self.robot_env_ids[robot_name]
                 robot_push_mask = push_mask[robot_env_ids]
                 if not robot_push_mask.any():
@@ -585,27 +630,29 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
     def _apply_morphology_randomization(self):
         """Apply mass and CoM randomization."""
-        if not getattr(self.cfg, "randomize_base_mass", True) and not getattr(self.cfg, "randomize_base_com", True):
-            return
-
-        print("[INFO - DR] Applying morphology randomization for humanoids...")
+        # No global check needed, we check per robot
         for robot_name, robot in self.robots.items():
             num_robot_envs = len(self.robot_env_ids[robot_name])
             local_env_ids = torch.arange(num_robot_envs, device="cpu")
 
-            is_large_robot = robot_name in ["h1"]
-            base_mass_range = self.cfg.base_mass_range_large if is_large_robot else self.cfg.base_mass_range_small
+            base_mass_range = getattr(
+                self.cfg, f"base_mass_range_{robot_name}", self.cfg.base_mass_range_small
+            )
 
             base_link_name = "torso"
             if robot_name in ROBOT_CONFIGS:
                 base_link_name = ROBOT_CONFIGS[robot_name].base_link
 
-            if getattr(self.cfg, "randomize_base_mass", True):
+            # Check per-robot mass randomization flag (default to global if not explicitly set)
+            randomize_mass = getattr(self.cfg, f"randomize_base_mass_{robot_name}", getattr(self.cfg, "randomize_base_mass", True))
+            if randomize_mass:
                 self._randomize_body_masses(
                     robot, robot_name, num_robot_envs, local_env_ids, [base_link_name], base_mass_range
                 )
 
-            if getattr(self.cfg, "randomize_base_com", True):
+            # Check per-robot CoM randomization flag
+            randomize_com = getattr(self.cfg, f"randomize_base_com_{robot_name}", getattr(self.cfg, "randomize_base_com", True))
+            if randomize_com:
                 com_range = {"x": (-0.05, 0.05), "y": (-0.05, 0.05), "z": (-0.01, 0.01)}
                 self._randomize_body_com(robot, robot_name, num_robot_envs, local_env_ids, [base_link_name], com_range)
 
