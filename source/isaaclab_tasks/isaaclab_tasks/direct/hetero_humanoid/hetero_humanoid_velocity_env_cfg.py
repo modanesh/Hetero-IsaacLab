@@ -11,6 +11,7 @@ import gymnasium as gym
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import DirectRLEnvCfg
+from isaaclab.envs.common import ViewerCfg
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
@@ -223,7 +224,7 @@ class RewardsCfg:
     )
     feet_air_time_cassie = RewTerm(
         func=custom_mdp.feet_air_time_biped,
-        weight=5.0,
+        weight=0.75,
         params={
             "sensor_cfg": SceneEntityCfg("cassie_contacts", body_names=".*toe"),
             "command_name": "base_velocity",
@@ -486,11 +487,11 @@ class RewardsCfg:
     )
     feet_air_time_h1 = RewTerm(
         func=custom_mdp.feet_air_time_biped,
-        weight=1.0,
+        weight=0.75,
         params={
             "sensor_cfg": SceneEntityCfg("h1_contacts", body_names=".*ankle_link"),
             "command_name": "base_velocity",
-            "threshold": 0.6,
+            "threshold": 0.4,
         },
     )
     flat_orientation_l2_h1 = RewTerm(
@@ -677,6 +678,11 @@ class HeterogeneousHumanoidFlatEnvCfg_PLAY(HeterogeneousHumanoidFlatEnvCfg):
         self.episode_length_s = 60.0
         self.domain_randomization = False
         self.observation_noise.enabled = False
+        # Front-facing camera to see all robots clearly
+        self.viewer = ViewerCfg(
+            eye=(0.0, 18.0, 7.0),
+            lookat=(0.0, 0.0, 0.5),
+        )
 
 
 @configclass
@@ -702,3 +708,8 @@ class HeterogeneousHumanoidRoughEnvCfg_PLAY(HeterogeneousHumanoidRoughEnvCfg):
         self.episode_length_s = 60.0
         self.domain_randomization = False
         self.observation_noise.enabled = False
+        # Front-facing camera to see all robots clearly
+        self.viewer = ViewerCfg(
+            eye=(0.0, 18.0, 7.0),
+            lookat=(0.0, 0.0, 0.5),
+        )

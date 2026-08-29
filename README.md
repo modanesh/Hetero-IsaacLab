@@ -1,4 +1,5 @@
-![Isaac Lab](docs/source/_static/hetero_isaaclab.gif)
+![Heterogeneous Quadrupeds](docs/source/_static/hetero_isaaclab.gif)
+![Heterogeneous Humanoids](docs/source/_static/hetero_isaaclab_humanoids.gif)
 
 ---
 
