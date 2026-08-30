@@ -1,4 +1,4 @@
-![Heterogeneous Quadrupeds and Humanoids](docs/source/_static/hetero_isaaclab_combined.gif)
+![Heterogeneous Quadrupeds and Humanoids](docs/source/_static/all_robots_unified.gif)
 
 ---
 
