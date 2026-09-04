@@ -11,6 +11,7 @@ import isaaclab.sim as sim_utils
 import isaaclab_tasks.direct.hetero_quadruped.hetero_quadruped_rewards as custom_mdp
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import DirectRLEnvCfg
+from isaaclab.envs.common import ViewerCfg
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
@@ -591,6 +592,11 @@ class HeterogeneousQuadrupedFlatEnvCfg_PLAY(HeterogeneousQuadrupedFlatEnvCfg):
 
         # make a smaller scene for play
         self.scene.num_envs = 50
+        # Front-facing camera to see all robots clearly
+        self.viewer = ViewerCfg(
+            eye=(0.0, 18.0, 7.0),
+            lookat=(0.0, 0.0, 0.5),
+        )
 
 
 @configclass
@@ -657,3 +663,8 @@ class HeterogeneousQuadrupedRoughEnvCfg_PLAY(HeterogeneousQuadrupedRoughEnvCfg):
             self.scene.terrain.terrain_generator.num_rows = 5
             self.scene.terrain.terrain_generator.num_cols = 5
             self.scene.terrain.terrain_generator.curriculum = False
+        # Front-facing camera to see all robots clearly
+        self.viewer = ViewerCfg(
+            eye=(0.0, 18.0, 7.0),
+            lookat=(0.0, 0.0, 0.5),
+        )

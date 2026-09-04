@@ -1,4 +1,4 @@
-![Isaac Lab](docs/source/_static/hetero_isaaclab.gif)
+![Heterogeneous Quadrupeds and Humanoids](docs/source/_static/all_robots_unified.gif)
 
 ---
 
@@ -20,7 +20,7 @@
 
 ## 🤖 Heterogeneous Multi-Robot Training
 
-This fork introduces **Hetero-IsaacLab**, a specialized architecture for training morphology-agnostic locomotion policies across multiple heterogeneous **quadrupedal** robotic environments simultaneously. 
+This fork introduces **Hetero-IsaacLab**, a specialized architecture for training morphology-agnostic locomotion policies across multiple heterogeneous **quadrupedal** robotic environments simultaneously.
 
 Most physics simulators and RL frameworks assume homogeneity, making it difficult to train universal controllers. This repository bridges that gap, providing concrete advantages:
 * **Morphology-Agnostic Feature Learning:** The policy is forced to learn fundamental locomotion principles that transcend specific hardware rather than memorizing robot-specific quirks.
@@ -54,14 +54,24 @@ cd Hetero-IsaacLab
 
 ### Basic Training
 
-To train on a specific subset of robots, you can pass the list with the `--quadrupeds` flag, from the list of available quadrupeds: `anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2,spot`.
+To train on a specific subset of quadrupeds, pass the `--quadrupeds` flag from `anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2,spot`:
 
 ```bash
-# Train on all 8 robots with 4096 environments
+# Train on all 8 quadruped robots with 4096 environments
 ./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py \
     --task=Isaac-Velocity-Flat-HeteroQuadruped-v0 \
     --quadrupeds anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2,spot
 ```
+
+To train on heterogeneous **humanoid/biped** robots (`cassie,digit,g1,h1`), pass the `--humanoids` flag:
+
+```bash
+# Train on all 4 humanoid robots with 4096 environments
+./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py \
+    --task=Isaac-Velocity-Flat-HeteroHumanoid-v0 \
+    --humanoids cassie,digit,g1,h1
+```
+
 
 ### Evaluation & Cinematic Video Generation
 
