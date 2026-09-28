@@ -239,6 +239,15 @@ class RewardsCfg:
             "threshold": 0.3,
         },
     )
+    gait_symmetry_cassie = RewTerm(
+        func=custom_mdp.feet_air_time_symmetry_biped,
+        weight=-10.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("cassie_contacts", body_names=".*toe"),
+            "command_name": "base_velocity",
+            "yaw_std": 0.25,
+        },
+    )
     flat_orientation_l2_cassie = RewTerm(
         func=custom_mdp.flat_orientation_l2, weight=-2.5, params={"asset_cfg": SceneEntityCfg("cassie")}
     )
@@ -304,11 +313,20 @@ class RewardsCfg:
     )
     feet_air_time_digit = RewTerm(
         func=custom_mdp.feet_air_time_biped,
-        weight=0.25,
+        weight=0.75,
         params={
             "sensor_cfg": SceneEntityCfg("digit_contacts", body_names=".*_leg_toe_roll"),
             "command_name": "base_velocity",
-            "threshold": 0.8,
+            "threshold": 0.4,
+        },
+    )
+    gait_symmetry_digit = RewTerm(
+        func=custom_mdp.feet_air_time_symmetry_biped,
+        weight=-2.5,
+        params={
+            "sensor_cfg": SceneEntityCfg("digit_contacts", body_names=".*_leg_toe_roll"),
+            "command_name": "base_velocity",
+            "yaw_std": 0.25,
         },
     )
     flat_orientation_l2_digit = RewTerm(
@@ -403,11 +421,20 @@ class RewardsCfg:
     )
     feet_air_time_g1 = RewTerm(
         func=custom_mdp.feet_air_time_biped,
-        weight=0.75,
+        weight=0.35,
         params={
             "sensor_cfg": SceneEntityCfg("g1_contacts", body_names=".*_ankle_roll_link"),
             "command_name": "base_velocity",
-            "threshold": 0.4,
+            "threshold": 0.28,
+        },
+    )
+    gait_symmetry_g1 = RewTerm(
+        func=custom_mdp.feet_air_time_symmetry_biped,
+        weight=-10.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("g1_contacts", body_names=".*_ankle_roll_link"),
+            "command_name": "base_velocity",
+            "yaw_std": 0.25,
         },
     )
     flat_orientation_l2_g1 = RewTerm(
@@ -502,6 +529,15 @@ class RewardsCfg:
             "threshold": 0.4,
         },
     )
+    gait_symmetry_h1 = RewTerm(
+        func=custom_mdp.feet_air_time_symmetry_biped,
+        weight=-10.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("h1_contacts", body_names=".*ankle_link"),
+            "command_name": "base_velocity",
+            "yaw_std": 0.25,
+        },
+    )
     flat_orientation_l2_h1 = RewTerm(
         func=custom_mdp.flat_orientation_l2, weight=-1.0, params={"asset_cfg": SceneEntityCfg("h1")}
     )
@@ -559,20 +595,20 @@ class RewardsCfg:
         params={"asset_cfg": SceneEntityCfg("h2", joint_names=[".*_hip_.*", ".*_knee_joint"])},
     )
     action_rate_l2_h2 = RewTerm(
-        func=custom_mdp.action_rate_l2, weight=-0.005, params={"asset_cfg": SceneEntityCfg("h2")}
+        func=custom_mdp.action_rate_l2, weight=-0.003, params={"asset_cfg": SceneEntityCfg("h2")}
     )
     feet_air_time_h2 = RewTerm(
         func=custom_mdp.feet_air_time_biped,
-        weight=1.5,
+        weight=0.75,
         params={
             "sensor_cfg": SceneEntityCfg("h2_contacts", body_names=".*_ankle_pitch_link"),
             "command_name": "base_velocity",
-            "threshold": 0.32,
+            "threshold": 0.22,
         },
     )
     gait_symmetry_h2 = RewTerm(
         func=custom_mdp.feet_air_time_symmetry_biped,
-        weight=-15.0,
+        weight=-5.0,
         params={
             "sensor_cfg": SceneEntityCfg("h2_contacts", body_names=".*_ankle_pitch_link"),
             "command_name": "base_velocity",
@@ -585,7 +621,7 @@ class RewardsCfg:
         params={"sensor_cfg": SceneEntityCfg("h2_contacts", body_names=".*_ankle_pitch_link")},
     )
     flat_orientation_l2_h2 = RewTerm(
-        func=custom_mdp.flat_orientation_l2, weight=-1.5, params={"asset_cfg": SceneEntityCfg("h2")}
+        func=custom_mdp.flat_orientation_l2, weight=-2.5, params={"asset_cfg": SceneEntityCfg("h2")}
     )
     feet_slide_h2 = RewTerm(
         func=custom_mdp.feet_slide,
@@ -597,26 +633,31 @@ class RewardsCfg:
     )
     dof_pos_limits_h2 = RewTerm(
         func=custom_mdp.joint_pos_limits,
-        weight=-2.0,
+        weight=-1.0,
         params={"asset_cfg": SceneEntityCfg("h2", joint_names=[".*_ankle_.*", ".*_knee_joint", "waist_pitch_joint"])},
     )
     termination_penalty_h2 = RewTerm(
         func=custom_mdp.is_terminated, weight=-200.0, params={"asset_cfg": SceneEntityCfg("h2")}
     )
-    joint_deviation_hip_h2 = RewTerm(
+    joint_deviation_hip_roll_h2 = RewTerm(
+        func=custom_mdp.joint_deviation_l1,
+        weight=-1.5,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names=".*_hip_roll_joint")},
+    )
+    joint_deviation_hip_yaw_h2 = RewTerm(
         func=custom_mdp.joint_deviation_l1,
         weight=-0.25,
-        params={"asset_cfg": SceneEntityCfg("h2", joint_names=[".*_hip_yaw_joint", ".*_hip_roll_joint"])},
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names=".*_hip_yaw_joint")},
     )
     joint_deviation_waist_roll_h2 = RewTerm(
         func=custom_mdp.joint_deviation_l1,
-        weight=-1.5,
+        weight=-1.0,
         params={"asset_cfg": SceneEntityCfg("h2", joint_names="waist_roll_joint")},
     )
     # Penalize waist pitch to prevent laying back or pitching forward
     joint_deviation_waist_pitch_h2 = RewTerm(
         func=custom_mdp.joint_deviation_l1,
-        weight=-3.0,
+        weight=-2.0,
         params={"asset_cfg": SceneEntityCfg("h2", joint_names="waist_pitch_joint")},
     )
     joint_deviation_waist_yaw_h2 = RewTerm(
@@ -629,10 +670,10 @@ class RewardsCfg:
         weight=-0.2,
         params={"asset_cfg": SceneEntityCfg("h2", joint_names=".*_shoulder_roll_joint")},
     )
-    # Penalize shoulder pitch to prevent raising arms into the air as counterweight
+    # Allow natural sagittal arm swing during locomotion
     joint_deviation_shoulder_pitch_h2 = RewTerm(
         func=custom_mdp.joint_deviation_l1,
-        weight=-0.2,
+        weight=-0.01,
         params={"asset_cfg": SceneEntityCfg("h2", joint_names=".*_shoulder_pitch_joint")},
     )
     joint_deviation_arms_h2 = RewTerm(
@@ -683,7 +724,7 @@ class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
     action_scale_digit: float = 0.5
     action_scale_g1: float = 0.25
     action_scale_h1: float = 0.5
-    action_scale_h2: float = 0.5
+    action_scale_h2: float = 0.25
 
     action_space = gym.spaces.Box(low=-float("inf"), high=float("inf"), shape=(num_actions,))
 
