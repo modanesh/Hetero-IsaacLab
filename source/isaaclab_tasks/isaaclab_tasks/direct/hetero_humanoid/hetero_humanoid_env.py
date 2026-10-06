@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import math
-from typing import Dict, Tuple
 
 import torch
 
@@ -26,7 +25,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
     cfg: HeterogeneousHumanoidVelocityEnvCfg
 
     def __init__(self, cfg: HeterogeneousHumanoidVelocityEnvCfg, render_mode: str | None = None, **kwargs):
-        self.all_humanoids = ["cassie", "digit", "g1", "h1"]
+        self.all_humanoids = ["cassie", "digit", "g1", "h1", "h2"]
         self.humanoids_list = getattr(cfg, "humanoids", self.all_humanoids)
 
         print(f"[INFO] Instantiating environment with humanoids: {self.humanoids_list}")
@@ -48,10 +47,10 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
         self.scene.filter_collisions()
 
-        self.robots: Dict[str, Articulation] = dict()
-        self.robot_sensors: Dict[str, ContactSensor] = dict()
-        self.robot_scanners: Dict[str, RayCaster] = dict()
-        self.robot_env_ids: Dict[str, torch.Tensor] = dict()
+        self.robots: dict[str, Articulation] = dict()
+        self.robot_sensors: dict[str, ContactSensor] = dict()
+        self.robot_scanners: dict[str, RayCaster] = dict()
+        self.robot_env_ids: dict[str, torch.Tensor] = dict()
 
         for robot_name in self.humanoids_list:
             self.robots[robot_name] = self.scene[robot_name]
@@ -89,10 +88,29 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
         self.reward_manager = RewardManager(self.cfg.rewards, self)
 
+        # Precompute illegal contact body IDs for each humanoid
+        self._illegal_contact_body_ids = {}
+        for robot_name in self.humanoids_list:
+            sensor = self.robot_sensors[robot_name]
+            contact_bodies = "torso"
+            if robot_name in ROBOT_CONFIGS:
+                cfg_r = ROBOT_CONFIGS[robot_name]
+                if cfg_r.illegal_contact_bodies is not None:
+                    contact_bodies = cfg_r.illegal_contact_bodies
+                else:
+                    contact_bodies = cfg_r.base_link
+            try:
+                body_ids, _ = sensor.find_bodies(contact_bodies)
+            except ValueError:
+                body_ids = [0]
+            self._illegal_contact_body_ids[robot_name] = body_ids
+            print(f"[INFO - {robot_name.upper()}] Resolved {len(body_ids)} illegal contact bodies: {contact_bodies}")
+
         self.termination_results = {
             "time_out": torch.zeros(self.num_envs, device=self.device, dtype=torch.bool),
             "base_contact": torch.zeros(self.num_envs, device=self.device, dtype=torch.bool),
             "base_orientation": torch.zeros(self.num_envs, device=self.device, dtype=torch.bool),
+            "root_height": torch.zeros(self.num_envs, device=self.device, dtype=torch.bool),
         }
 
         if self.sim.has_gui():
@@ -158,7 +176,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                         # Standard bird leg uses identity. Humanoid needs pitch/knee flipped.
                         # We also check for 'ankle' to catch H1's ankle, which doesn't have 'pitch' in its name.
                         jname = joint_names[physical_joints[i]]
-                        if "pitch" in jname or "knee" in jname or "ankle" in jname:
+                        if ("pitch" in jname or "knee" in jname or "ankle" in jname) and "roll" not in jname:
                             signs[i] = -1.0
 
             self.joint_signs[robot_name] = signs
@@ -368,7 +386,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         """Compute rewards using the reward manager."""
         return self.reward_manager.compute(dt=self.step_dt)
 
-    def _get_dones(self) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Check termination conditions for each robot type."""
         time_out = self.episode_length_buf >= self.max_episode_length
         self.termination_results["time_out"][:] = time_out
@@ -377,16 +395,9 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             env_ids = self.robot_env_ids[robot_name]
             net_contact_forces = sensor.data.net_forces_w_history
 
-            base_link_name = "torso"
-            if robot_name in ROBOT_CONFIGS:
-                base_link_name = ROBOT_CONFIGS[robot_name].base_link
-
-            try:
-                base_link, _ = sensor.find_bodies(base_link_name)
-            except ValueError:
-                base_link = [0]  # fallback
+            body_ids = self._illegal_contact_body_ids.get(robot_name, [0])
             terminated_robot = torch.any(
-                torch.max(torch.norm(net_contact_forces[:, :, base_link], dim=-1), dim=1)[0]
+                torch.max(torch.norm(net_contact_forces[:, :, body_ids], dim=-1), dim=1)[0]
                 > self.cfg.contact_threshold,
                 dim=1,
             )
@@ -407,7 +418,18 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
         self.termination_results["base_orientation"][:] = base_orientation
 
-        dones = base_contact | base_orientation
+        root_height = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        for robot_name, robot in self.robots.items():
+            if robot_name in ROBOT_CONFIGS:
+                min_h = ROBOT_CONFIGS[robot_name].min_root_height
+                if min_h is not None:
+                    env_ids = self.robot_env_ids[robot_name]
+                    terminated_robot = robot.data.root_pos_w[:, 2] < min_h
+                    root_height[env_ids] = terminated_robot
+
+        self.termination_results["root_height"][:] = root_height
+
+        dones = base_contact | base_orientation | root_height
         return dones, time_out
 
     def _reset_idx(self, env_ids: torch.Tensor | None):

@@ -11,6 +11,7 @@ the termination introduced by the function.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import torch
@@ -20,6 +21,19 @@ from isaaclab.managers import SceneEntityCfg
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
+
+
+def bad_orientation_safe(
+    env: ManagerBasedRLEnv, limit_angle: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Terminate when the asset's orientation is too far from upright.
+
+    Uses cosine comparison directly to prevent NaN floating-point issues in torch.acos.
+    When upright, -projected_gravity_b[:, 2] == 1.0. When tilted > limit_angle, it drops < cos(limit_angle).
+    """
+    asset: RigidObject = env.scene[asset_cfg.name]
+    cos_limit = math.cos(limit_angle)
+    return -asset.data.projected_gravity_b[:, 2] < cos_limit
 
 
 def terrain_out_of_bounds(

@@ -14,24 +14,25 @@
 
 **Notice:** This repository is a fork of the main Isaac Lab repo built on top of upstream commit [84d0ff05](https://github.com/isaac-sim/IsaacLab/tree/84d0ff05a6). Modifications for heterogeneous training are layered directly on top of the core framework, maintaining a clean Git history.
 
-**Notice:** This project is different from [IsaacLab-HARL](https://github.com/DIRECTLab/IsaacLab-HARL) which focuses on heterogeneous _multi-agent_ learning in Isaac Lab. In this project, we focus on heterogeneous _single-robot_ learning, where each environment contains a single robot but the robots across environments are different. This allows us to train morphology-agnostic policies across multiple quadrupedal robots simultaneously.
+**Notice:** This project is different from [IsaacLab-HARL](https://github.com/DIRECTLab/IsaacLab-HARL) which focuses on heterogeneous _multi-agent_ learning in Isaac Lab. In this project, we focus on heterogeneous _single-robot_ learning, where each environment contains a single robot but the robots across environments are different. This allows us to train morphology-agnostic policies across multiple quadrupedal and humanoid/bipedal robots simultaneously.
 
 **Isaac Lab** is a GPU-accelerated, open-source framework designed to unify and simplify robotics research workflows, such as reinforcement learning, imitation learning, and motion planning. Built on NVIDIA Isaac Sim, it combines fast and accurate physics and sensor simulation, making it an ideal choice for sim-to-real transfer in robotics.
 
 ## 🤖 Heterogeneous Multi-Robot Training
 
-This fork introduces **Hetero-IsaacLab**, a specialized architecture for training morphology-agnostic locomotion policies across multiple heterogeneous **quadrupedal** robotic environments simultaneously.
+This fork introduces **Hetero-IsaacLab**, a specialized architecture for training morphology-agnostic locomotion policies across multiple heterogeneous **quadrupedal** and **humanoid/bipedal** robotic environments simultaneously.
 
 Most physics simulators and RL frameworks assume homogeneity, making it difficult to train universal controllers. This repository bridges that gap, providing concrete advantages:
-* **Morphology-Agnostic Feature Learning:** The policy is forced to learn fundamental locomotion principles that transcend specific hardware rather than memorizing robot-specific quirks.
-* **Efficient Multi-Platform Deployment:** Training 8 robot types heterogeneously uses the same compute as training 1 robot type, eliminating the need to maintain separate codebases and models.
-* **Better Exploration:** Different morphologies explore different regions of the state-action space naturally (e.g., lighter robots discover high-speed gaits, heavier ones excel at stability).
+* **Morphology-Agnostic Feature Learning:** The policy is forced to learn fundamental locomotion principles that transcend specific hardware morphologies rather than memorizing robot-specific quirks.
+* **Efficient Multi-Platform Deployment:** Training 8 quadruped or 5 humanoid robot types heterogeneously uses the same compute as training 1 robot type, eliminating the need to maintain separate codebases and models.
+* **Better Exploration:** Different morphologies explore different regions of the state-action space naturally (e.g., varying leg lengths, weights, and joint actuation limits discover robust, versatile gaits).
 
 ### Key Architecture Features
-* **Heterogeneous Configuration System:** Custom config classes with dynamic environment assignment and reward filtering.
-* **Observation & Action Unification:** Enforces an "ANYmal Joint-Major" format, mapping diverse joint orders (e.g., Spot, Unitree) to a standard policy format.
-* **Index Mapping System:** Efficient conversion between global environment IDs and robot-local indices.
-* **Comprehensive Domain Randomization:** Handles extreme morphological quirks with flexible reset randomizations (mass, CoM, friction) and interval randomization for external disturbances.
+* **Dual-Paradigm Heterogeneous Environments:** Supports both Manager-Based environments and high-throughput Direct RL workflows (`HeteroQuadrupedEnv` and `HeteroHumanoidEnv`).
+* **Quadruped Joint Unification:** Enforces an "ANYmal Joint-Major" format, mapping diverse quadruped joint orders (e.g., Spot, Unitree, ANYmal) to a standard policy format.
+* **Humanoid Semantic Joint Alignment & Action Masking:** A canonical 50-DOF semantic joint alignment system combined with `MaskedMLPModel` to seamlessly handle morphological variations across humanoids (from 12-DOF biped legs to 30+ DOF full-body humanoids with arms and hands) without gradient pollution or entropy distortions.
+* **Index Mapping System:** Efficient zero-copy conversion between global environment IDs and robot-local indices.
+* **Comprehensive Domain Randomization:** Handles extreme morphological quirks with per-robot overrides for mass, center of mass, ground friction, velocity command ranges, and external disturbance pushes.
 
 ### Training Results and Insights
 For a comprehensive breakdown of these experimental results, including the detailed methodology and the complete set of performance plots, the full report is available in [this WandB report](https://wandb.ai/modanesh/Hetero-Isaac/reports/Hetero-IsaacLab-Experiments--VmlldzoxNjQ4NTMzNw).
@@ -54,6 +55,7 @@ cd Hetero-IsaacLab
 
 ### Basic Training
 
+#### 1. Heterogeneous Quadrupeds
 To train on a specific subset of quadrupeds, pass the `--quadrupeds` flag from `anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2,spot`:
 
 ```bash
@@ -63,13 +65,32 @@ To train on a specific subset of quadrupeds, pass the `--quadrupeds` flag from `
     --quadrupeds anymal_d,anymal_c,anymal_b,unitree_a1,unitree_go1,unitree_go2,unitree_b2,spot
 ```
 
-To train on heterogeneous **humanoid/biped** robots (`cassie,digit,g1,h1`), pass the `--humanoids` flag:
+#### 2. Heterogeneous Humanoids & Bipeds
+To train on heterogeneous **humanoid/biped** robots (`cassie,digit,g1,h1,h2`), pass the `--humanoids` flag:
 
 ```bash
-# Train on all 4 humanoid robots with 4096 environments
+# Train on all 5 humanoid robots with 4096 environments
 ./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py \
     --task=Isaac-Velocity-Flat-HeteroHumanoid-v0 \
-    --humanoids cassie,digit,g1,h1
+    --humanoids cassie,digit,g1,h1,h2
+```
+
+#### 3. Single-Robot Locomotion (Unitree H2 Humanoid)
+You can also train on the standalone Unitree H2 full-body humanoid (31-DOF) via the Manager-Based RL workflow:
+
+```bash
+# Download official Unitree H2 USD assets (if needed)
+python scripts/tools/download_h2_assets.py
+
+# Train Unitree H2 on flat terrain
+./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/train.py \
+    --task=Isaac-Velocity-Flat-H2-v0 \
+    --num_envs=4096
+
+# Play and visualize trained H2 policy
+./isaaclab.sh -p scripts/reinforcement_learning/rsl_rl/play.py \
+    --task=Isaac-Velocity-Flat-H2-Play-v0 \
+    --num_envs=16
 ```
 
 

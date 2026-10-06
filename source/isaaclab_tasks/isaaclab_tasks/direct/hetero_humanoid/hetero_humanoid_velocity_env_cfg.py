@@ -3,8 +3,9 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+from __future__ import annotations
+
 import math
-from typing import List
 
 import gymnasium as gym
 
@@ -27,7 +28,7 @@ from isaaclab_assets.robots.agility import DIGIT_V4_CFG, LEG_JOINT_NAMES
 
 # Humanoid Robot Assets
 from isaaclab_assets.robots.cassie import CASSIE_CFG
-from isaaclab_assets.robots.unitree import G1_MINIMAL_CFG, H1_MINIMAL_CFG
+from isaaclab_assets.robots.unitree import G1_MINIMAL_CFG, H1_MINIMAL_CFG, H2_MINIMAL_CFG
 
 from .robot_configs import ROBOT_CONFIGS
 
@@ -40,7 +41,7 @@ from .robot_configs import ROBOT_CONFIGS
 class HeterogeneousRobotCfg(ArticulationCfg):
     """Configuration for a robot asset in a heterogeneous scene."""
 
-    env_ids: List[int] | None = None
+    env_ids: list[int] | None = None
     """List of environment IDs this robot is present in."""
 
 
@@ -48,7 +49,7 @@ class HeterogeneousRobotCfg(ArticulationCfg):
 class HeterogeneousSensorCfg(ContactSensorCfg):
     """Configuration for a sensor asset in a heterogeneous scene."""
 
-    env_ids: List[int] | None = None
+    env_ids: list[int] | None = None
     """List of environment IDs this sensor is present in."""
 
 
@@ -56,7 +57,7 @@ class HeterogeneousSensorCfg(ContactSensorCfg):
 class HeterogeneousRayCasterCfg(RayCasterCfg):
     """Configuration for a raycaster asset in a heterogeneous scene."""
 
-    env_ids: List[int] | None = None
+    env_ids: list[int] | None = None
     """List of environment IDs this sensor is present in."""
 
 
@@ -115,6 +116,9 @@ class HeterogeneousHumanoidSceneCfg(InteractiveSceneCfg):
     h1: HeterogeneousRobotCfg = H1_MINIMAL_CFG.replace(prim_path="{ENV_REGEX_NS}/h1")
     h1.spawn.activate_contact_sensors = True
 
+    h2: HeterogeneousRobotCfg = H2_MINIMAL_CFG.replace(prim_path="{ENV_REGEX_NS}/h2")
+    h2.spawn.activate_contact_sensors = True
+
     # Contact Sensors
     cassie_contacts: HeterogeneousSensorCfg = ContactSensorCfg(
         prim_path="{ENV_REGEX_NS}/cassie/.*", history_length=3, track_air_time=True
@@ -127,6 +131,9 @@ class HeterogeneousHumanoidSceneCfg(InteractiveSceneCfg):
     )
     h1_contacts: HeterogeneousSensorCfg = ContactSensorCfg(
         prim_path="{ENV_REGEX_NS}/h1/.*", history_length=3, track_air_time=True
+    )
+    h2_contacts: HeterogeneousSensorCfg = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/h2/.*", history_length=3, track_air_time=True
     )
 
     sky_light = AssetBaseCfg(
@@ -169,6 +176,7 @@ class HeterogeneousHumanoidRoughSceneCfg(HeterogeneousHumanoidSceneCfg):
     digit_scanner = get_raycaster_cfg("{ENV_REGEX_NS}/digit/torso_base")
     g1_scanner = get_raycaster_cfg("{ENV_REGEX_NS}/g1/torso_link")
     h1_scanner = get_raycaster_cfg("{ENV_REGEX_NS}/h1/torso_link")
+    h2_scanner = get_raycaster_cfg("{ENV_REGEX_NS}/h2/pelvis")
 
 
 ##
@@ -527,12 +535,136 @@ class RewardsCfg:
         func=custom_mdp.joint_deviation_l1, weight=-0.1, params={"asset_cfg": SceneEntityCfg("h1", joint_names="torso")}
     )
 
+    # --- H2 REWARDS ---
+    track_lin_vel_xy_exp_h2 = RewTerm(
+        func=custom_mdp.track_lin_vel_xy_exp,
+        weight=2.0,
+        params={"command_name": "base_velocity", "std": math.sqrt(0.25), "asset_cfg": SceneEntityCfg("h2")},
+    )
+    track_ang_vel_z_exp_h2 = RewTerm(
+        func=custom_mdp.track_ang_vel_z_exp,
+        weight=1.5,
+        params={"command_name": "base_velocity", "std": math.sqrt(0.25), "asset_cfg": SceneEntityCfg("h2")},
+    )
+    ang_vel_xy_l2_h2 = RewTerm(func=custom_mdp.ang_vel_xy_l2, weight=-0.2, params={"asset_cfg": SceneEntityCfg("h2")})
+    lin_vel_z_l2_h2 = RewTerm(func=custom_mdp.lin_vel_z_l2, weight=-2.0, params={"asset_cfg": SceneEntityCfg("h2")})
+    dof_torques_l2_h2 = RewTerm(
+        func=custom_mdp.joint_torques_l2,
+        weight=-1.5e-7,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names=[".*_hip_.*", ".*_knee_joint", ".*_ankle_.*"])},
+    )
+    dof_acc_l2_h2 = RewTerm(
+        func=custom_mdp.joint_acc_l2,
+        weight=-2.5e-7,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names=[".*_hip_.*", ".*_knee_joint"])},
+    )
+    action_rate_l2_h2 = RewTerm(
+        func=custom_mdp.action_rate_l2, weight=-0.005, params={"asset_cfg": SceneEntityCfg("h2")}
+    )
+    feet_air_time_h2 = RewTerm(
+        func=custom_mdp.feet_air_time_biped,
+        weight=1.5,
+        params={
+            "sensor_cfg": SceneEntityCfg("h2_contacts", body_names=".*_ankle_pitch_link"),
+            "command_name": "base_velocity",
+            "threshold": 0.32,
+        },
+    )
+    gait_symmetry_h2 = RewTerm(
+        func=custom_mdp.feet_air_time_symmetry_biped,
+        weight=-15.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("h2_contacts", body_names=".*_ankle_pitch_link"),
+            "command_name": "base_velocity",
+            "yaw_std": 0.25,
+        },
+    )
+    no_fly_h2 = RewTerm(
+        func=custom_mdp.no_fly,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("h2_contacts", body_names=".*_ankle_pitch_link")},
+    )
+    flat_orientation_l2_h2 = RewTerm(
+        func=custom_mdp.flat_orientation_l2, weight=-1.5, params={"asset_cfg": SceneEntityCfg("h2")}
+    )
+    feet_slide_h2 = RewTerm(
+        func=custom_mdp.feet_slide,
+        weight=-0.25,
+        params={
+            "sensor_cfg": SceneEntityCfg("h2_contacts", body_names=".*_ankle_pitch_link"),
+            "asset_cfg": SceneEntityCfg("h2", body_names=".*_ankle_pitch_link"),
+        },
+    )
+    dof_pos_limits_h2 = RewTerm(
+        func=custom_mdp.joint_pos_limits,
+        weight=-2.0,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names=[".*_ankle_.*", ".*_knee_joint", "waist_pitch_joint"])},
+    )
+    termination_penalty_h2 = RewTerm(
+        func=custom_mdp.is_terminated, weight=-200.0, params={"asset_cfg": SceneEntityCfg("h2")}
+    )
+    joint_deviation_hip_h2 = RewTerm(
+        func=custom_mdp.joint_deviation_l1,
+        weight=-0.25,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names=[".*_hip_yaw_joint", ".*_hip_roll_joint"])},
+    )
+    joint_deviation_waist_roll_h2 = RewTerm(
+        func=custom_mdp.joint_deviation_l1,
+        weight=-1.5,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names="waist_roll_joint")},
+    )
+    # Penalize waist pitch to prevent laying back or pitching forward
+    joint_deviation_waist_pitch_h2 = RewTerm(
+        func=custom_mdp.joint_deviation_l1,
+        weight=-3.0,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names="waist_pitch_joint")},
+    )
+    joint_deviation_waist_yaw_h2 = RewTerm(
+        func=custom_mdp.joint_deviation_l1,
+        weight=-0.2,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names="waist_yaw_joint")},
+    )
+    joint_deviation_shoulder_roll_h2 = RewTerm(
+        func=custom_mdp.joint_deviation_l1,
+        weight=-0.2,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names=".*_shoulder_roll_joint")},
+    )
+    # Penalize shoulder pitch to prevent raising arms into the air as counterweight
+    joint_deviation_shoulder_pitch_h2 = RewTerm(
+        func=custom_mdp.joint_deviation_l1,
+        weight=-0.2,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names=".*_shoulder_pitch_joint")},
+    )
+    joint_deviation_arms_h2 = RewTerm(
+        func=custom_mdp.joint_deviation_l1,
+        weight=-0.1,
+        params={
+            "asset_cfg": SceneEntityCfg(
+                "h2",
+                joint_names=[
+                    ".*_shoulder_yaw_joint",
+                    ".*_elbow_joint",
+                ],
+            )
+        },
+    )
+    joint_deviation_wrists_h2 = RewTerm(
+        func=custom_mdp.joint_deviation_l1,
+        weight=-0.1,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names=".*_wrist_.*")},
+    )
+    joint_deviation_head_h2 = RewTerm(
+        func=custom_mdp.joint_deviation_l1,
+        weight=-0.2,
+        params={"asset_cfg": SceneEntityCfg("h2", joint_names="head_.*")},
+    )
+
 
 @configclass
 class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
     """Base Configuration for heterogeneous-humanoid velocity-tracking environment."""
 
-    humanoids: list[str] = ["cassie", "digit", "g1", "h1"]
+    humanoids: list[str] = ["cassie", "digit", "g1", "h1", "h2"]
 
     episode_length_s = 20.0
     decimation = 4
@@ -551,6 +683,7 @@ class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
     action_scale_digit: float = 0.5
     action_scale_g1: float = 0.25
     action_scale_h1: float = 0.5
+    action_scale_h2: float = 0.5
 
     action_space = gym.spaces.Box(low=-float("inf"), high=float("inf"), shape=(num_actions,))
 
@@ -587,6 +720,7 @@ class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
     reset_base_vel_range_digit: tuple = (-0.5, 0.5)
     reset_base_vel_range_g1: tuple = (0.0, 0.0)
     reset_base_vel_range_h1: tuple = (0.0, 0.0)
+    reset_base_vel_range_h2: tuple = (0.0, 0.0)
 
     reset_joint_pos_mode_cassie: str = "scale"
     reset_joint_pos_range_cassie: tuple = (1.0, 1.0)
@@ -599,6 +733,9 @@ class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
 
     reset_joint_pos_mode_h1: str = "scale"
     reset_joint_pos_range_h1: tuple = (1.0, 1.0)
+
+    reset_joint_pos_mode_h2: str = "scale"
+    reset_joint_pos_range_h2: tuple = (1.0, 1.0)
 
     resampling_time_range: tuple = (10.0, 10.0)
     standing_probability: float = 0.1
@@ -656,6 +793,18 @@ class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
     randomize_base_mass_h1: bool = False
     push_robots_h1: bool = False
     command_ranges_h1: dict = {
+        "lin_vel_x": (0.0, 1.0),
+        "lin_vel_y": (0.0, 0.0),
+        "ang_vel_z": (-1.0, 1.0),
+        "heading": (-math.pi, math.pi),
+    }
+
+    # -- H2
+    resampling_time_range_h2: tuple = (10.0, 10.0)
+    standing_probability_h2: float = 0.02
+    randomize_base_mass_h2: bool = False
+    push_robots_h2: bool = False
+    command_ranges_h2: dict = {
         "lin_vel_x": (0.0, 1.0),
         "lin_vel_y": (0.0, 0.0),
         "ang_vel_z": (-1.0, 1.0),

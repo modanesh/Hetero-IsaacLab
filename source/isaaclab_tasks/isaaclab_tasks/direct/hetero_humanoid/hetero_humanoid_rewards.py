@@ -24,9 +24,14 @@ def get_robot_env_ids(env, cfg: SceneEntityCfg):
 
 def _resolve_joint_ids(asset, cfg: SceneEntityCfg):
     """Resolve joint IDs from config, defaulting to all if None."""
-    if cfg.joint_ids is None:
-        return slice(None)
-    return cfg.joint_ids
+    if cfg.joint_ids is not None and not isinstance(cfg.joint_ids, slice):
+        return cfg.joint_ids
+    if cfg.joint_names is not None:
+        ids, _ = asset.find_joints(cfg.joint_names)
+        return ids
+    if cfg.joint_ids is not None:
+        return cfg.joint_ids
+    return slice(None)
 
 
 def _resolve_body_ids(asset, cfg: SceneEntityCfg):
@@ -43,7 +48,9 @@ from isaaclab.utils.math import quat_apply_inverse, yaw_quat
 
 
 def track_lin_vel_xy_exp(env, std: float, command_name: str, asset_cfg: SceneEntityCfg) -> torch.Tensor:
-    """Reward tracking of linear velocity commands (xy axes) in the gravity aligned robot frame using exponential kernel."""
+    """Reward tracking of linear velocity commands (xy axes) in the gravity aligned
+    robot frame using exponential kernel.
+    """
     asset: RigidObject = env.scene[asset_cfg.name]
     robot_env_ids = get_robot_env_ids(env, asset_cfg)
     reward = torch.zeros(env.num_envs, device=env.device)
@@ -108,6 +115,37 @@ def feet_air_time_biped(env, sensor_cfg: SceneEntityCfg, command_name: str, thre
     is_moving = torch.norm(env._commands[robot_env_ids, :2], dim=1) > 0.1
     robot_reward *= is_moving
 
+    reward[robot_env_ids] = robot_reward
+    return reward
+
+
+def feet_air_time_symmetry_biped(
+    env, sensor_cfg: SceneEntityCfg, command_name: str, yaw_std: float = 0.25
+) -> torch.Tensor:
+    """Penalize asymmetry in feet air time for bipeds during straight walking.
+
+    This function penalizes differences in air time between the left and right foot upon landing,
+    preventing asymmetric strides (limping). It is smoothly gated by turning commands so that
+    differential strides needed for sharp turns are not penalized.
+    """
+    contact_sensor: ContactSensor = env.scene[sensor_cfg.name]
+    feet_ids = _resolve_body_ids(contact_sensor, sensor_cfg)
+    robot_env_ids = get_robot_env_ids(env, sensor_cfg)
+
+    commands = env._commands[robot_env_ids]
+    yaw_cmd = commands[:, 2]
+    straight_gating = torch.exp(-torch.square(yaw_cmd) / (2 * (yaw_std**2)))
+    is_moving = torch.norm(commands[:, :2], dim=1) > 0.1
+
+    first_contact = contact_sensor.compute_first_contact(env.step_dt)[:, feet_ids]
+    any_first_contact = torch.any(first_contact, dim=1)
+
+    last_air_time = contact_sensor.data.last_air_time[:, feet_ids]
+    both_feet_stepped = (last_air_time[:, 0] > 0.0) & (last_air_time[:, 1] > 0.0)
+    air_diff = torch.abs(last_air_time[:, 0] - last_air_time[:, 1])
+
+    reward = torch.zeros(env.num_envs, device=env.device)
+    robot_reward = air_diff * any_first_contact * both_feet_stepped * straight_gating * is_moving
     reward[robot_env_ids] = robot_reward
     return reward
 

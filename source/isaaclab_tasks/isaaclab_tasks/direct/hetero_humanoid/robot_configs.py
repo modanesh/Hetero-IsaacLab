@@ -10,8 +10,9 @@ alignment across different morphologies. Extra DOFs (arms, torso, fingers) are
 appended after the canonical legs and discovered automatically at runtime.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 
 @dataclass
@@ -25,7 +26,7 @@ class RobotJointConfig:
     # 15-19: Left Arm (Shoulder Pitch, Roll, Yaw, Elbow Pitch, Roll)
     # 20-24: Right Arm (Shoulder Pitch, Roll, Yaw, Elbow Pitch, Roll)
     # 25+: Unmapped joints (Fingers, etc) will be appended dynamically
-    canonical_joints: List[str | None] = field(default_factory=list)
+    canonical_joints: list[str | None] = field(default_factory=list)
 
     # --- Kinematic type ---
     # "bird" = Cassie/Digit (no sign flip needed)
@@ -35,6 +36,8 @@ class RobotJointConfig:
     # --- Termination ---
     base_link: str = "torso"
     orientation_limit: float | None = None  # radians; None = no orientation termination
+    illegal_contact_bodies: list[str] | str | None = None
+    min_root_height: float | None = None  # meters; None = no root height termination
 
     # --- Action scale override (if different from default) ---
     action_scale: float = 0.5
@@ -44,7 +47,7 @@ class RobotJointConfig:
 # Per-Robot Configurations
 # =============================================================================
 
-ROBOT_CONFIGS: Dict[str, RobotJointConfig] = {
+ROBOT_CONFIGS: dict[str, RobotJointConfig] = {
     "cassie": RobotJointConfig(
         canonical_joints=[
             # 0-11: Legs
@@ -207,6 +210,62 @@ ROBOT_CONFIGS: Dict[str, RobotJointConfig] = {
         kinematic_type="humanoid",
         base_link="torso_link",
         orientation_limit=None,
+        action_scale=0.5,
+    ),
+    "h2": RobotJointConfig(
+        canonical_joints=[
+            # 0-11: Legs
+            "left_hip_pitch_joint",
+            "left_hip_roll_joint",
+            "left_hip_yaw_joint",
+            "left_knee_joint",
+            "left_ankle_pitch_joint",
+            "left_ankle_roll_joint",
+            "right_hip_pitch_joint",
+            "right_hip_roll_joint",
+            "right_hip_yaw_joint",
+            "right_knee_joint",
+            "right_ankle_pitch_joint",
+            "right_ankle_roll_joint",
+            # 12-14: Torso / Waist
+            "waist_yaw_joint",
+            "waist_roll_joint",
+            "waist_pitch_joint",
+            # 15-19: Left Arm
+            "left_shoulder_pitch_joint",
+            "left_shoulder_roll_joint",
+            "left_shoulder_yaw_joint",
+            "left_elbow_joint",
+            None,
+            # 20-24: Right Arm
+            "right_shoulder_pitch_joint",
+            "right_shoulder_roll_joint",
+            "right_shoulder_yaw_joint",
+            "right_elbow_joint",
+            None,
+            # 25-30: Wrists
+            "left_wrist_roll_joint",
+            "left_wrist_pitch_joint",
+            "left_wrist_yaw_joint",
+            "right_wrist_roll_joint",
+            "right_wrist_pitch_joint",
+            "right_wrist_yaw_joint",
+            # 31-32: Head
+            "head_yaw_joint",
+            "head_pitch_joint",
+        ],
+        kinematic_type="humanoid",
+        base_link="pelvis",
+        orientation_limit=0.7,
+        illegal_contact_bodies=[
+            ".*pelvis",
+            ".*torso.*",
+            ".*_knee_.*",
+            ".*_elbow_.*",
+            ".*_hand_.*",
+            ".*waist.*",
+        ],
+        min_root_height=0.65,
         action_scale=0.5,
     ),
 }

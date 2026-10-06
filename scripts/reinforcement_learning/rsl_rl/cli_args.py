@@ -50,7 +50,7 @@ def add_rsl_rl_args(parser: argparse.ArgumentParser):
         "--humanoids",
         type=str,
         default=None,
-        help="Comma-separated list of humanoids to use, e.g., 'cassie,digit,g1,h1'.",
+        help="Comma-separated list of humanoids to use, e.g., 'cassie,digit,g1,h1,h2'.",
     )
 
 

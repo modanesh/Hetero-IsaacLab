@@ -12,6 +12,8 @@ The following configurations are available:
 * :obj:`UNITREE_GO2_CFG`: Unitree Go2 robot with DC motor model for the legs
 * :obj:`H1_CFG`: H1 humanoid robot
 * :obj:`H1_MINIMAL_CFG`: H1 humanoid robot with minimal collision bodies
+* :obj:`H2_CFG`: H2 humanoid robot (31-DOF)
+* :obj:`H2_MINIMAL_CFG`: H2 humanoid robot with minimal collision bodies
 * :obj:`G1_CFG`: G1 humanoid robot
 * :obj:`G1_MINIMAL_CFG`: G1 humanoid robot with minimal collision bodies
 * :obj:`G1_29DOF_CFG`: G1 humanoid robot configured for locomanipulation tasks
@@ -19,6 +21,9 @@ The following configurations are available:
 
 Reference: https://github.com/unitreerobotics/unitree_ros
 """
+
+import math
+import os
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ActuatorNetMLPCfg, DCMotorCfg, ImplicitActuatorCfg
@@ -310,6 +315,200 @@ H1_MINIMAL_CFG.spawn.usd_path = f"{ISAACLAB_NUCLEUS_DIR}/Robots/Unitree/H1/h1_mi
 
 This configuration removes most collision meshes to speed up simulation.
 """
+
+
+_H2_LOCAL_USD = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/Robots/Unitree/H2/H2_dae.usd"))
+H2_USD_PATH = _H2_LOCAL_USD if os.path.exists(_H2_LOCAL_USD) else f"{ISAACLAB_NUCLEUS_DIR}/Robots/Unitree/H2/h2.usd"
+
+
+# Unitree H2 Actuator Motor Constants (derived from natural frequency 10Hz, damping ratio 2.0)
+_H2_ARMATURE_5020 = 0.003609725
+_H2_ARMATURE_7520_14 = 0.010177520
+_H2_ARMATURE_7520_22 = 0.025101925
+_H2_ARMATURE_4010 = 0.00425
+
+_H2_NATURAL_FREQ = 10 * 2.0 * math.pi
+_H2_DAMPING_RATIO = 2.0
+
+_H2_STIFFNESS_5020 = _H2_ARMATURE_5020 * _H2_NATURAL_FREQ**2
+_H2_STIFFNESS_7520_14 = _H2_ARMATURE_7520_14 * _H2_NATURAL_FREQ**2
+_H2_STIFFNESS_7520_22 = _H2_ARMATURE_7520_22 * _H2_NATURAL_FREQ**2
+_H2_STIFFNESS_4010 = _H2_ARMATURE_4010 * _H2_NATURAL_FREQ**2
+
+_H2_DAMPING_5020 = 2.0 * _H2_DAMPING_RATIO * _H2_ARMATURE_5020 * _H2_NATURAL_FREQ
+_H2_DAMPING_7520_14 = 2.0 * _H2_DAMPING_RATIO * _H2_ARMATURE_7520_14 * _H2_NATURAL_FREQ
+_H2_DAMPING_7520_22 = 2.0 * _H2_DAMPING_RATIO * _H2_ARMATURE_7520_22 * _H2_NATURAL_FREQ
+_H2_DAMPING_4010 = 2.0 * _H2_DAMPING_RATIO * _H2_ARMATURE_4010 * _H2_NATURAL_FREQ
+
+
+H2_CFG = ArticulationCfg(
+    spawn=sim_utils.UsdFileCfg(
+        usd_path=H2_USD_PATH,
+        activate_contact_sensors=True,
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+            disable_gravity=False,
+            retain_accelerations=False,
+            linear_damping=0.0,
+            angular_damping=0.0,
+            max_linear_velocity=1000.0,
+            max_angular_velocity=1000.0,
+            max_depenetration_velocity=1.0,
+        ),
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=False, solver_position_iteration_count=8, solver_velocity_iteration_count=4
+        ),
+    ),
+    init_state=ArticulationCfg.InitialStateCfg(
+        pos=(0.0, 0.0, 1.04),
+        joint_pos={
+            ".*_hip_pitch_joint": -0.312,
+            ".*_knee_joint": 0.669,
+            ".*_ankle_pitch_joint": -0.363,
+            "waist_pitch_joint": 0.0,
+            "waist_roll_joint": 0.0,
+            "waist_yaw_joint": 0.0,
+            ".*_elbow_joint": 0.6,
+            ".*_shoulder_pitch_joint": 0.0,
+            ".*_shoulder_roll_joint": 0.0,
+            ".*_shoulder_yaw_joint": 0.0,
+        },
+        joint_vel={".*": 0.0},
+    ),
+    soft_joint_pos_limit_factor=0.9,
+    actuators={
+        "legs": ImplicitActuatorCfg(
+            joint_names_expr=[
+                ".*_hip_yaw_joint",
+                ".*_hip_roll_joint",
+                ".*_hip_pitch_joint",
+                ".*_knee_joint",
+            ],
+            effort_limit_sim={
+                ".*_hip_yaw_joint": 264.0,
+                ".*_hip_roll_joint": 417.0,
+                ".*_hip_pitch_joint": 417.0,
+                ".*_knee_joint": 417.0,
+            },
+            velocity_limit_sim={
+                ".*_hip_yaw_joint": 32.0,
+                ".*_hip_roll_joint": 20.0,
+                ".*_hip_pitch_joint": 20.0,
+                ".*_knee_joint": 20.0,
+            },
+            stiffness={
+                ".*_hip_pitch_joint": _H2_STIFFNESS_7520_22,
+                ".*_hip_roll_joint": _H2_STIFFNESS_7520_22,
+                ".*_hip_yaw_joint": _H2_STIFFNESS_7520_14,
+                ".*_knee_joint": _H2_STIFFNESS_7520_22,
+            },
+            damping={
+                ".*_hip_pitch_joint": _H2_DAMPING_7520_22,
+                ".*_hip_roll_joint": _H2_DAMPING_7520_22,
+                ".*_hip_yaw_joint": _H2_DAMPING_7520_14,
+                ".*_knee_joint": _H2_DAMPING_7520_22,
+            },
+            armature={
+                ".*_hip_pitch_joint": _H2_ARMATURE_7520_22,
+                ".*_hip_roll_joint": _H2_ARMATURE_7520_22,
+                ".*_hip_yaw_joint": _H2_ARMATURE_7520_14,
+                ".*_knee_joint": _H2_ARMATURE_7520_22,
+            },
+        ),
+        "feet": ImplicitActuatorCfg(
+            joint_names_expr=[".*_ankle_pitch_joint", ".*_ankle_roll_joint"],
+            effort_limit_sim=150.0,
+            velocity_limit_sim=37.0,
+            stiffness=2.0 * _H2_STIFFNESS_5020,
+            damping=2.0 * _H2_DAMPING_5020,
+            armature=2.0 * _H2_ARMATURE_5020,
+        ),
+        "waist": ImplicitActuatorCfg(
+            joint_names_expr=["waist_roll_joint", "waist_pitch_joint"],
+            effort_limit_sim=200.0,
+            velocity_limit_sim=37.0,
+            stiffness=200.0,
+            damping=5.0,
+            armature=0.01,
+        ),
+        "waist_yaw": ImplicitActuatorCfg(
+            joint_names_expr=["waist_yaw_joint"],
+            effort_limit_sim=264.0,
+            velocity_limit_sim=32.0,
+            stiffness=_H2_STIFFNESS_7520_14,
+            damping=_H2_DAMPING_7520_14,
+            armature=_H2_ARMATURE_7520_14,
+        ),
+        "head": ImplicitActuatorCfg(
+            joint_names_expr=["head_pitch_joint", "head_yaw_joint"],
+            effort_limit_sim=150.0,
+            velocity_limit_sim=37.0,
+            stiffness=2.0 * _H2_STIFFNESS_5020,
+            damping=2.0 * _H2_DAMPING_5020,
+            armature=2.0 * _H2_ARMATURE_5020,
+        ),
+        "arms": ImplicitActuatorCfg(
+            joint_names_expr=[
+                ".*_shoulder_pitch_joint",
+                ".*_shoulder_roll_joint",
+                ".*_shoulder_yaw_joint",
+                ".*_elbow_joint",
+                ".*_wrist_roll_joint",
+                ".*_wrist_pitch_joint",
+                ".*_wrist_yaw_joint",
+            ],
+            effort_limit_sim={
+                ".*_shoulder_pitch_joint": 75.0,
+                ".*_shoulder_roll_joint": 75.0,
+                ".*_shoulder_yaw_joint": 75.0,
+                ".*_elbow_joint": 75.0,
+                ".*_wrist_roll_joint": 75.0,
+                ".*_wrist_pitch_joint": 15.0,
+                ".*_wrist_yaw_joint": 15.0,
+            },
+            velocity_limit_sim={
+                ".*_shoulder_pitch_joint": 37.0,
+                ".*_shoulder_roll_joint": 37.0,
+                ".*_shoulder_yaw_joint": 37.0,
+                ".*_elbow_joint": 37.0,
+                ".*_wrist_roll_joint": 37.0,
+                ".*_wrist_pitch_joint": 22.0,
+                ".*_wrist_yaw_joint": 22.0,
+            },
+            stiffness={
+                ".*_shoulder_pitch_joint": _H2_STIFFNESS_5020,
+                ".*_shoulder_roll_joint": _H2_STIFFNESS_5020,
+                ".*_shoulder_yaw_joint": _H2_STIFFNESS_5020,
+                ".*_elbow_joint": _H2_STIFFNESS_5020,
+                ".*_wrist_roll_joint": _H2_STIFFNESS_5020,
+                ".*_wrist_pitch_joint": _H2_STIFFNESS_4010,
+                ".*_wrist_yaw_joint": _H2_STIFFNESS_4010,
+            },
+            damping={
+                ".*_shoulder_pitch_joint": _H2_DAMPING_5020,
+                ".*_shoulder_roll_joint": _H2_DAMPING_5020,
+                ".*_shoulder_yaw_joint": _H2_DAMPING_5020,
+                ".*_elbow_joint": _H2_DAMPING_5020,
+                ".*_wrist_roll_joint": _H2_DAMPING_5020,
+                ".*_wrist_pitch_joint": _H2_DAMPING_4010,
+                ".*_wrist_yaw_joint": _H2_DAMPING_4010,
+            },
+            armature={
+                ".*_shoulder_pitch_joint": _H2_ARMATURE_5020,
+                ".*_shoulder_roll_joint": _H2_ARMATURE_5020,
+                ".*_shoulder_yaw_joint": _H2_ARMATURE_5020,
+                ".*_elbow_joint": _H2_ARMATURE_5020,
+                ".*_wrist_roll_joint": _H2_ARMATURE_5020,
+                ".*_wrist_pitch_joint": _H2_ARMATURE_4010,
+                ".*_wrist_yaw_joint": _H2_ARMATURE_4010,
+            },
+        ),
+    },
+)
+"""Configuration for the Unitree H2 Humanoid robot (31-DOF)."""
+
+
+H2_MINIMAL_CFG = H2_CFG.copy()
+"""Configuration for the Unitree H2 Humanoid robot with minimal collision bodies."""
 
 
 G1_CFG = ArticulationCfg(
