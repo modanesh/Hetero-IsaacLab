@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 
+import gymnasium as gym
 import torch
 
 import isaaclab.utils.math as math_utils
@@ -21,7 +22,19 @@ from .hetero_humanoid_velocity_env_cfg import HeterogeneousHumanoidVelocityEnvCf
 from .robot_configs import ROBOT_CONFIGS
 
 
+class _PerRobot(dict):
+    """{robot_name: tensor}, with the ``.to()`` that DirectRLEnv.step calls on the actions."""
+
+    def to(self, device):
+        return _PerRobot({name: value.to(device) for name, value in self.items()})
+
+
 class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
+    """Each robot uses its own joints, in its own joint order, so observations and actions are per robot:
+    ``{robot_name: tensor of shape (that robot's number of envs, its own size)}``. The envs of one robot are
+    ``robot_env_ids[robot_name]``, in that order.
+    """
+
     cfg: HeterogeneousHumanoidVelocityEnvCfg
 
     def __init__(self, cfg: HeterogeneousHumanoidVelocityEnvCfg, render_mode: str | None = None, **kwargs):
@@ -43,6 +56,15 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         self._setup_robot_distribution(cfg, self.humanoids_list)
         self._filter_rewards(cfg, self.humanoids_list)
 
+        # per-robot sizes: 12 base values + joint pos, joint vel and last action for each of its own joints
+        num_scan = 187 if getattr(cfg, "include_height_scanners", False) else 0
+        num_joints = {
+            name: sum(joint is not None for joint in ROBOT_CONFIGS[name].canonical_joints)
+            for name in self.humanoids_list
+        }
+        cfg.action_space = num_joints
+        cfg.observation_space = {name: 12 + 3 * n + num_scan for name, n in num_joints.items()}
+
         super().__init__(cfg, render_mode, **kwargs)
 
         self.scene.filter_collisions()
@@ -63,6 +85,16 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             ids.sort()
             self.robot_env_ids[robot_name] = torch.tensor(ids, device=self.device)
 
+        # the base class batches every space with num_envs; each robot has only its own envs
+        self.observation_space = gym.spaces.Dict({
+            name: gym.vector.utils.batch_space(self.single_observation_space["policy"][name], len(ids))
+            for name, ids in self.robot_env_ids.items()
+        })
+        self.action_space = gym.spaces.Dict({
+            name: gym.vector.utils.batch_space(self.single_action_space[name], len(ids))
+            for name, ids in self.robot_env_ids.items()
+        })
+
         if self.cfg.domain_randomization:
             self._apply_startup_randomization()
             self._apply_morphology_randomization()
@@ -71,8 +103,11 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         self._next_push_time = torch.empty(self.num_envs, device=self.device).uniform_(*self._push_interval_s)
         self._elapsed_time = torch.zeros(self.num_envs, device=self.device)
 
-        self.actions = torch.zeros(self.num_envs, self.cfg.num_actions, device=self.device)
-        self.previous_actions = torch.zeros_like(self.actions)
+        self.actions = {
+            name: torch.zeros(len(ids), self.cfg.action_space[name], device=self.device)
+            for name, ids in self.robot_env_ids.items()
+        }
+        self.previous_actions = {name: torch.zeros_like(a) for name, a in self.actions.items()}
 
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)
         self._heading_target = torch.zeros(self.num_envs, device=self.device)
@@ -120,10 +155,8 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         self._setup_joint_mappings()
 
     def _setup_joint_mappings(self):
-        """Build mappings between physical robot joint ordering and virtual policy ordering."""
-        self.active_policy_indices = {}
+        """Find each robot's controlled joints (listed in ROBOT_CONFIGS), kept in the robot's own joint order."""
         self.physical_joint_indices = {}
-        self.joint_signs = {}
 
         for robot_name, robot in self.robots.items():
             if robot_name not in ROBOT_CONFIGS:
@@ -132,10 +165,9 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             config = ROBOT_CONFIGS[robot_name]
             joint_names = robot.data.joint_names
 
-            active_policy = []
             physical_joints = []
 
-            for policy_idx, target_str in enumerate(config.canonical_joints):
+            for target_str in config.canonical_joints:
                 if target_str is None:
                     continue
 
@@ -151,35 +183,19 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                             matched_idx = idx
                             break
 
-                if matched_idx is not None:
-                    active_policy.append(policy_idx)
-                    physical_joints.append(matched_idx)
-                else:
-                    print(f"[WARNING] Could not find joint matching '{target_str}' for robot {robot_name}")
+                if matched_idx is None:
+                    # the observation and action sizes were set from these lists, so every joint must exist
+                    raise ValueError(f"Could not find joint matching '{target_str}' for robot {robot_name}")
+                physical_joints.append(matched_idx)
 
             # Do NOT map remaining physical joints (e.g. passive springs on Digit).
             # If a robot has fingers that need to be actuated, they should be explicitly defined in canonical_joints.
 
             print(f"[INFO - {robot_name.upper()}] Mapped {len(physical_joints)} joints.")
 
-            self.active_policy_indices[robot_name] = torch.tensor(active_policy, dtype=torch.long, device=self.device)
             self.physical_joint_indices[robot_name] = torch.tensor(
-                physical_joints, dtype=torch.long, device=self.device
+                sorted(physical_joints), dtype=torch.long, device=self.device
             )
-
-            # Define kinematic sign multipliers to align human-legs (G1, H1) with bird-legs (Cassie, Digit)
-            signs = torch.ones(len(active_policy), device=self.device)
-            if config.kinematic_type == "humanoid":
-                # Only apply flips to canonical leg joints (indices 0-11)
-                for i, pol_idx in enumerate(active_policy):
-                    if pol_idx < 12:
-                        # Standard bird leg uses identity. Humanoid needs pitch/knee flipped.
-                        # We also check for 'ankle' to catch H1's ankle, which doesn't have 'pitch' in its name.
-                        jname = joint_names[physical_joints[i]]
-                        if ("pitch" in jname or "knee" in jname or "ankle" in jname) and "roll" not in jname:
-                            signs[i] = -1.0
-
-            self.joint_signs[robot_name] = signs
 
     def _setup_robot_distribution(self, cfg, active_humanoids: list):
         """Partition num_envs across active humanoids before scene creation."""
@@ -235,9 +251,13 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         for attr_name in attrs_to_delete:
             delattr(cfg.rewards, attr_name)
 
-    def _pre_physics_step(self, actions: torch.Tensor):
-        self.previous_actions = self.actions.clone()
-        self.actions = actions.clone()
+    def step(self, action: dict[str, torch.Tensor]):
+        """Step with per-robot actions: ``{robot_name: (that robot's number of envs, its number of joints)}``."""
+        return super().step(_PerRobot(action))
+
+    def _pre_physics_step(self, actions: dict[str, torch.Tensor]):
+        self.previous_actions = {name: a.clone() for name, a in self.actions.items()}
+        self.actions = {name: actions[name].clone() for name in self.robots}
 
         self._resample_commands()
 
@@ -275,10 +295,8 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         self._apply_interval_randomization()
 
         # Process actions (scale + default joint pos)
-        self.processed_actions = torch.zeros(self.num_envs, self.cfg.num_actions, device=self.device)
+        self.processed_actions = {}
         for robot_name, robot in self.robots.items():
-            env_ids = self.robot_env_ids[robot_name]
-            active_policy = self.active_policy_indices[robot_name]
             phys_idx = self.physical_joint_indices[robot_name]
 
             config_scale = ROBOT_CONFIGS[robot_name].action_scale
@@ -286,37 +304,17 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                 self.cfg, f"action_scale_{robot_name}", getattr(self.cfg, "action_scale", config_scale)
             )
 
-            robot_actions = self.actions[env_ids][:, active_policy]
-            scaled_actions = robot_actions * self.joint_signs[robot_name] * action_scale
             default_pos = robot.data.default_joint_pos[:, phys_idx]
-
-            self.processed_actions[env_ids, : len(active_policy)] = scaled_actions + default_pos
+            self.processed_actions[robot_name] = self.actions[robot_name] * action_scale + default_pos
 
     def _apply_action(self):
         for robot_name, robot in self.robots.items():
-            env_ids = self.robot_env_ids[robot_name]
-            local_indices = torch.arange(len(env_ids), device=self.device)
-            active_policy = self.active_policy_indices[robot_name]
-            phys_idx = self.physical_joint_indices[robot_name]
-
             # Write targets ONLY to native actuated joints using the joint_ids parameter
-            targets = self.processed_actions[env_ids, : len(active_policy)]
-            robot.set_joint_position_target(targets, env_ids=local_indices, joint_ids=phys_idx)
-
-    def get_action_masks(self) -> torch.Tensor:
-        """Get boolean mask indicating valid vs padded action dimensions for each environment.
-        True = Valid action dimension, False = Padded dimension.
-        """
-        mask = torch.zeros((self.num_envs, self.cfg.num_actions), dtype=torch.bool, device=self.device)
-        for robot_name, robot in self.robots.items():
-            env_ids = self.robot_env_ids[robot_name]
-            active_policy = self.active_policy_indices[robot_name]
-            # Use advanced indexing to set the specific active policy slots to True
-            mask[env_ids.unsqueeze(1), active_policy.unsqueeze(0)] = True
-        return mask
+            phys_idx = self.physical_joint_indices[robot_name]
+            robot.set_joint_position_target(self.processed_actions[robot_name], joint_ids=phys_idx)
 
     def _get_observations(self) -> dict:
-        obs_buf = torch.zeros(self.num_envs, self.cfg.num_observations, device=self.device)
+        obs = {}
 
         for robot_name, robot in self.robots.items():
             env_ids = self.robot_env_ids[robot_name]
@@ -325,41 +323,30 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             proj_gravity = robot.data.projected_gravity_b.clone()
             commands = self._commands[env_ids].clone()
 
-            active_policy = self.active_policy_indices[robot_name]
             phys_idx = self.physical_joint_indices[robot_name]
 
             raw_joint_pos = robot.data.joint_pos - robot.data.default_joint_pos
             raw_joint_vel = robot.data.joint_vel
 
-            joint_pos_rel = raw_joint_pos[:, phys_idx] * self.joint_signs[robot_name]
-            joint_vel = raw_joint_vel[:, phys_idx] * self.joint_signs[robot_name]
-
-            padded_joint_pos = torch.zeros(len(env_ids), self.cfg.num_actions, device=self.device)
-            padded_joint_vel = torch.zeros(len(env_ids), self.cfg.num_actions, device=self.device)
-            padded_joint_pos[:, active_policy] = joint_pos_rel
-            padded_joint_vel[:, active_policy] = joint_vel
-
-            padded_actions = torch.zeros(len(env_ids), self.cfg.num_actions, device=self.device)
-            padded_actions[:, active_policy] = self.actions[env_ids][:, active_policy]
+            joint_pos_rel = raw_joint_pos[:, phys_idx]
+            joint_vel = raw_joint_vel[:, phys_idx]
 
             if self.cfg.domain_randomization and self.cfg.observation_noise.enabled:
                 noise_cfg = self.cfg.observation_noise
                 lin_vel += torch.empty_like(lin_vel).uniform_(*noise_cfg.lin_vel_noise)
                 ang_vel += torch.empty_like(ang_vel).uniform_(*noise_cfg.ang_vel_noise)
                 proj_gravity += torch.empty_like(proj_gravity).uniform_(*noise_cfg.projected_gravity_noise)
-                padded_joint_pos[:, active_policy] += torch.empty_like(joint_pos_rel).uniform_(
-                    *noise_cfg.joint_pos_noise
-                )
-                padded_joint_vel[:, active_policy] += torch.empty_like(joint_vel).uniform_(*noise_cfg.joint_vel_noise)
+                joint_pos_rel += torch.empty_like(joint_pos_rel).uniform_(*noise_cfg.joint_pos_noise)
+                joint_vel += torch.empty_like(joint_vel).uniform_(*noise_cfg.joint_vel_noise)
 
             robot_obs_list = [
                 lin_vel,
                 ang_vel,
                 proj_gravity,
                 commands,
-                padded_joint_pos,
-                padded_joint_vel,
-                padded_actions,
+                joint_pos_rel,
+                joint_vel,
+                self.actions[robot_name],
             ]
 
             if getattr(self.cfg, "include_height_scanners", False):
@@ -375,12 +362,9 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
                 height_measurements = torch.clip(height_measurements, -1.0, 1.0)
                 robot_obs_list.append(height_measurements)
 
-            robot_obs = torch.cat(robot_obs_list, dim=-1)
-            obs_buf[env_ids, :] = robot_obs
+            obs[robot_name] = torch.cat(robot_obs_list, dim=-1)
 
-        action_masks = self.get_action_masks().float()
-
-        return {"policy": obs_buf, "action_mask": action_masks}
+        return {"policy": obs}
 
     def _get_rewards(self) -> torch.Tensor:
         """Compute rewards using the reward manager."""
@@ -477,8 +461,10 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         # Always reset the physical states (this was previously hidden under domain_randomization)
         self._apply_reset_randomization(env_ids)
 
-        self.actions[env_ids] = 0.0
-        self.previous_actions[env_ids] = 0.0
+        for robot_name, robot_env_ids_all in self.robot_env_ids.items():
+            local_indices = torch.searchsorted(robot_env_ids_all, env_ids[torch.isin(env_ids, robot_env_ids_all)])
+            self.actions[robot_name][local_indices] = 0.0
+            self.previous_actions[robot_name][local_indices] = 0.0
         self._next_command_resample[env_ids] = 0.0
         self._is_standing_env[env_ids] = False
         self._is_heading_env[env_ids] = False

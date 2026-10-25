@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import math
 
-import gymnasium as gym
-
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import DirectRLEnvCfg
@@ -29,8 +27,6 @@ from isaaclab_assets.robots.agility import DIGIT_V4_CFG, LEG_JOINT_NAMES
 # Humanoid Robot Assets
 from isaaclab_assets.robots.cassie import CASSIE_CFG
 from isaaclab_assets.robots.unitree import G1_MINIMAL_CFG, H1_MINIMAL_CFG, H2_MINIMAL_CFG
-
-from .robot_configs import ROBOT_CONFIGS
 
 ##
 # Custom Configuration Classes for Heterogeneous Setups
@@ -709,10 +705,6 @@ class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
 
     episode_length_s = 20.0
     decimation = 4
-    # Set to max needed for any humanoid. Calculated dynamically from ROBOT_CONFIGS.
-    num_actions = max(len(cfg.canonical_joints) for cfg in ROBOT_CONFIGS.values())
-    # 12 base + 3 * num_actions (joint_pos, joint_vel, actions)
-    num_observations = 12 + (3 * num_actions)
     num_states = 0
 
     include_height_scanners: bool = False
@@ -726,10 +718,10 @@ class HeterogeneousHumanoidVelocityEnvCfg(DirectRLEnvCfg):
     action_scale_h1: float = 0.5
     action_scale_h2: float = 0.25
 
-    action_space = gym.spaces.Box(low=-float("inf"), high=float("inf"), shape=(num_actions,))
-
-    observation_space = gym.spaces.Box(low=-float("inf"), high=float("inf"), shape=(num_observations,), dtype=float)
-    state_space = gym.spaces.Box(low=-float("inf"), high=float("inf"), shape=(num_observations,), dtype=float)
+    # Each robot uses its own joints, so the spaces are per robot ({robot_name: size}); the env fills them in.
+    action_space: dict = {}
+    observation_space: dict = {}
+    state_space = 0
 
     sim: sim_utils.SimulationCfg = sim_utils.SimulationCfg(
         dt=0.005,
@@ -882,12 +874,6 @@ class HeterogeneousHumanoidRoughEnvCfg(HeterogeneousHumanoidVelocityEnvCfg):
         self.scene = HeterogeneousHumanoidRoughSceneCfg(num_envs=4096, env_spacing=4.0)
         self.include_height_scanners = True
         self.height_scanner_offset = 0.8
-        self.num_observations = 12 + (3 * self.num_actions)
-        if getattr(self, "include_height_scanners", False):
-            self.num_observations += 187
-        self.observation_space = gym.spaces.Box(
-            low=-float("inf"), high=float("inf"), shape=(self.num_observations,), dtype=float
-        )
 
 
 @configclass

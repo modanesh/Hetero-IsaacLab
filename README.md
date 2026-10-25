@@ -30,7 +30,7 @@ Most physics simulators and RL frameworks assume homogeneity, making it difficul
 ### Key Architecture Features
 * **Dual-Paradigm Heterogeneous Environments:** Supports both Manager-Based environments and high-throughput Direct RL workflows (`HeteroQuadrupedEnv` and `HeteroHumanoidEnv`).
 * **Quadruped Joint Unification:** Enforces an "ANYmal Joint-Major" format, mapping diverse quadruped joint orders (e.g., Spot, Unitree, ANYmal) to a standard policy format.
-* **Humanoid Semantic Joint Alignment & Action Masking:** A canonical 50-DOF semantic joint alignment system combined with `MaskedMLPModel` to seamlessly handle morphological variations across humanoids (from 12-DOF biped legs to 30+ DOF full-body humanoids with arms and hands) without gradient pollution or entropy distortions.
+* **Native Humanoid Joints:** Each humanoid keeps its own joints in its own order, with no padding: observations and actions are per robot (`{robot_name: tensor}`), sized by that robot's joints (from 12-DOF biped legs to 30+ DOF full-body humanoids with arms and hands).
 * **Index Mapping System:** Efficient zero-copy conversion between global environment IDs and robot-local indices.
 * **Comprehensive Domain Randomization:** Handles extreme morphological quirks with per-robot overrides for mass, center of mass, ground friction, velocity command ranges, and external disturbance pushes.
 

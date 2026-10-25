@@ -100,8 +100,8 @@ def feet_air_time_biped(env, sensor_cfg: SceneEntityCfg, command_name: str, thre
     feet_ids = _resolve_body_ids(contact_sensor, sensor_cfg)
     robot_env_ids = get_robot_env_ids(env, sensor_cfg)
 
-    air_time = contact_sensor.data.current_air_time[robot_env_ids][:, feet_ids]
-    contact_time = contact_sensor.data.current_contact_time[robot_env_ids][:, feet_ids]
+    air_time = contact_sensor.data.current_air_time[:, feet_ids]
+    contact_time = contact_sensor.data.current_contact_time[:, feet_ids]
     in_contact = contact_time > 0.0
     in_mode_time = torch.where(in_contact, contact_time, air_time)
     single_stance = torch.sum(in_contact.int(), dim=1) == 1
@@ -135,10 +135,10 @@ def feet_air_time_symmetry_biped(
     straight_gating = torch.exp(-torch.square(yaw_cmd) / (2 * (yaw_std**2)))
     is_moving = torch.norm(commands[:, :2], dim=1) > 0.1
 
-    first_contact = contact_sensor.compute_first_contact(env.step_dt)[robot_env_ids][:, feet_ids]
+    first_contact = contact_sensor.compute_first_contact(env.step_dt)[:, feet_ids]
     any_first_contact = torch.any(first_contact, dim=1)
 
-    last_air_time = contact_sensor.data.last_air_time[robot_env_ids][:, feet_ids]
+    last_air_time = contact_sensor.data.last_air_time[:, feet_ids]
     both_feet_stepped = (last_air_time[:, 0] > 0.0) & (last_air_time[:, 1] > 0.0)
     air_diff = torch.abs(last_air_time[:, 0] - last_air_time[:, 1])
 
@@ -163,7 +163,7 @@ def feet_slide(env, sensor_cfg: SceneEntityCfg, asset_cfg: SceneEntityCfg) -> to
     robot_env_ids = get_robot_env_ids(env, sensor_cfg)
 
     reward = torch.zeros(env.num_envs, device=env.device)
-    net_forces = contact_sensor.data.net_forces_w_history[robot_env_ids]
+    net_forces = contact_sensor.data.net_forces_w_history
     in_contact = (
         torch.max(torch.norm(net_forces[:, :, sensor_feet_ids], dim=-1), dim=1)[0] > 1.0
     )
@@ -213,12 +213,8 @@ def action_rate_l2(env, asset_cfg: SceneEntityCfg = None) -> torch.Tensor:
         # Remove suffixes like "_contacts" or "_scanner" if present (though asset_cfg should just be the robot name)
         robot_name = robot_name.replace("_contacts", "").replace("_scanner", "")
 
-        active_policy = env.active_policy_indices[robot_name]
-
         reward[robot_env_ids] = torch.sum(
-            torch.square(
-                env.actions[robot_env_ids][:, active_policy] - env.previous_actions[robot_env_ids][:, active_policy]
-            ),
+            torch.square(env.actions[robot_name] - env.previous_actions[robot_name]),
             dim=1,
         )
     return reward
@@ -262,7 +258,7 @@ def no_fly(env, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
     feet_ids = _resolve_body_ids(contact_sensor, sensor_cfg)
     robot_env_ids = get_robot_env_ids(env, sensor_cfg)
 
-    in_contact = contact_sensor.data.net_forces_w[robot_env_ids][:, feet_ids, 2] > 1.0
+    in_contact = contact_sensor.data.net_forces_w[:, feet_ids, 2] > 1.0
     has_contact = torch.any(in_contact, dim=-1)
 
     reward = torch.zeros(env.num_envs, device=env.device)
@@ -302,7 +298,7 @@ def undesired_contacts(env, threshold: float, sensor_cfg: SceneEntityCfg) -> tor
     robot_env_ids = get_robot_env_ids(env, sensor_cfg)
     body_ids = _resolve_body_ids(contact_sensor, sensor_cfg)
 
-    net_contact_forces = contact_sensor.data.net_forces_w_history[robot_env_ids]
+    net_contact_forces = contact_sensor.data.net_forces_w_history
     is_contact = torch.max(torch.norm(net_contact_forces[:, :, body_ids], dim=-1), dim=1)[0] > threshold
 
     reward = torch.zeros(env.num_envs, device=env.device)
@@ -316,7 +312,7 @@ def desired_contacts(env, sensor_cfg: SceneEntityCfg, threshold: float = 1.0) ->
     robot_env_ids = get_robot_env_ids(env, sensor_cfg)
     body_ids = _resolve_body_ids(contact_sensor, sensor_cfg)
 
-    contacts = contact_sensor.data.net_forces_w_history[robot_env_ids][:, :, body_ids, :].norm(dim=-1).max(dim=1)[0] > threshold
+    contacts = contact_sensor.data.net_forces_w_history[:, :, body_ids, :].norm(dim=-1).max(dim=1)[0] > threshold
     zero_contact = (~contacts).all(dim=1)
 
     reward = torch.zeros(env.num_envs, device=env.device)

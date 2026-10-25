@@ -5,9 +5,8 @@
 
 """Centralized robot joint configuration for heterogeneous humanoid environments.
 
-Each robot has a canonical 12-DOF biped leg ordering used for action/observation
-alignment across different morphologies. Extra DOFs (arms, torso, fingers) are
-appended after the canonical legs and discovered automatically at runtime.
+Each robot lists the joints the policy controls. The environment uses them in the
+robot's own joint order, so every robot has its own observation and action size.
 """
 
 from __future__ import annotations
@@ -19,19 +18,10 @@ from dataclasses import dataclass, field
 class RobotJointConfig:
     """Configuration for a single robot's joint layout and properties."""
 
-    # --- Canonical 50-DOF semantic joint alignment ---
-    # We use a canonical slot ordering to align identical joints across different robots.
-    # 0-11: Legs
-    # 12-14: Torso (Yaw, Pitch, Roll)
-    # 15-19: Left Arm (Shoulder Pitch, Roll, Yaw, Elbow Pitch, Roll)
-    # 20-24: Right Arm (Shoulder Pitch, Roll, Yaw, Elbow Pitch, Roll)
-    # 25+: Unmapped joints (Fingers, etc) will be appended dynamically
+    # --- Controlled joints ---
+    # Names of the joints the policy controls; None entries are skipped. The list order does not
+    # matter: the environment keeps the robot's own joint order.
     canonical_joints: list[str | None] = field(default_factory=list)
-
-    # --- Kinematic type ---
-    # "bird" = Cassie/Digit (no sign flip needed)
-    # "humanoid" = G1/H1 (pitch & knee signs flipped to align with bird-leg convention)
-    kinematic_type: str = "bird"
 
     # --- Termination ---
     base_link: str = "torso"
@@ -80,7 +70,6 @@ ROBOT_CONFIGS: dict[str, RobotJointConfig] = {
             None,
             None,
         ],
-        kinematic_type="bird",
         base_link="pelvis",
         orientation_limit=None,
         action_scale=0.5,
@@ -117,7 +106,6 @@ ROBOT_CONFIGS: dict[str, RobotJointConfig] = {
             "right_arm_elbow",
             None,
         ],
-        kinematic_type="bird",
         base_link="torso_base",
         orientation_limit=None,
         action_scale=0.5,
@@ -170,7 +158,6 @@ ROBOT_CONFIGS: dict[str, RobotJointConfig] = {
             "right_five_joint",
             "right_six_joint",
         ],
-        kinematic_type="humanoid",
         base_link="torso_link",
         orientation_limit=None,
         action_scale=0.25,
@@ -207,7 +194,6 @@ ROBOT_CONFIGS: dict[str, RobotJointConfig] = {
             "right_elbow",
             None,
         ],
-        kinematic_type="humanoid",
         base_link="torso_link",
         orientation_limit=None,
         action_scale=0.5,
@@ -254,7 +240,6 @@ ROBOT_CONFIGS: dict[str, RobotJointConfig] = {
             "head_yaw_joint",
             "head_pitch_joint",
         ],
-        kinematic_type="humanoid",
         base_link="pelvis",
         orientation_limit=None,
         illegal_contact_bodies="torso_link",

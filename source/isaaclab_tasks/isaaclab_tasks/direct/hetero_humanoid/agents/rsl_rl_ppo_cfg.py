@@ -16,7 +16,7 @@ class HeterogeneousHumanoidRoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     experiment_name = "heterogeneous_humanoid_rough"
     empirical_normalization = False
     actor = RslRlMLPModelCfg(
-        class_name="isaaclab_tasks.direct.hetero_humanoid.masked_mlp_model:MaskedMLPModel",
+        class_name="MLPModel",
         hidden_dims=[512, 256, 128],
         activation="elu",
         distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(
