@@ -16,6 +16,14 @@ def get_robot_env_ids(env, cfg: SceneEntityCfg):
     return env.robot_env_ids[robot_name]
 
 
+def _robot_actions(env, cfg: SceneEntityCfg, robot_env_ids: torch.Tensor):
+    """This robot's current and previous actions, whether the env keeps one action tensor for all envs or
+    one per robot ({robot_name: tensor}, as in hetero_legged)."""
+    if isinstance(env.actions, dict):
+        return env.actions[cfg.name], env.previous_actions[cfg.name]
+    return env.actions[robot_env_ids], env.previous_actions[robot_env_ids]
+
+
 def _resolve_joint_ids(asset, cfg: SceneEntityCfg):
     """Resolve joint IDs from config, defaulting to all if None."""
     if cfg.joint_ids is None:
@@ -129,7 +137,8 @@ def action_rate_l2(env, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """Penalize the rate of change of the actions using L2 squared kernel."""
     robot_env_ids = get_robot_env_ids(env, asset_cfg)
     reward = torch.zeros(env.num_envs, device=env.device)
-    reward[robot_env_ids] = torch.sum(torch.square(env.actions[robot_env_ids] - env.previous_actions[robot_env_ids]), dim=1)
+    actions, previous_actions = _robot_actions(env, asset_cfg, robot_env_ids)
+    reward[robot_env_ids] = torch.sum(torch.square(actions - previous_actions), dim=1)
     return reward
 
 
@@ -317,7 +326,8 @@ def action_smoothness_penalty(env, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """Penalize large instantaneous changes in the network action output."""
     robot_env_ids = get_robot_env_ids(env, asset_cfg)
     reward = torch.zeros(env.num_envs, device=env.device)
-    reward[robot_env_ids] = torch.linalg.norm(env.actions[robot_env_ids] - env.previous_actions[robot_env_ids], dim=1)
+    actions, previous_actions = _robot_actions(env, asset_cfg, robot_env_ids)
+    reward[robot_env_ids] = torch.linalg.norm(actions - previous_actions, dim=1)
     return reward
 
 

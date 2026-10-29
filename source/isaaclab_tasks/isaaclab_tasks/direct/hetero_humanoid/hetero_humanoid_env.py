@@ -37,8 +37,12 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
     cfg: HeterogeneousHumanoidVelocityEnvCfg
 
+    # robots this env can hold and their joint/termination settings (a subclass can add robots)
+    all_robot_names = ["cassie", "digit", "g1", "h1", "h2"]
+    robot_configs = ROBOT_CONFIGS
+
     def __init__(self, cfg: HeterogeneousHumanoidVelocityEnvCfg, render_mode: str | None = None, **kwargs):
-        self.all_humanoids = ["cassie", "digit", "g1", "h1", "h2"]
+        self.all_humanoids = list(self.all_robot_names)
         self.humanoids_list = getattr(cfg, "humanoids", self.all_humanoids)
 
         print(f"[INFO] Instantiating environment with humanoids: {self.humanoids_list}")
@@ -56,14 +60,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         self._setup_robot_distribution(cfg, self.humanoids_list)
         self._filter_rewards(cfg, self.humanoids_list)
 
-        # per-robot sizes: 12 base values + joint pos, joint vel and last action for each of its own joints
-        num_scan = 187 if getattr(cfg, "include_height_scanners", False) else 0
-        num_joints = {
-            name: sum(joint is not None for joint in ROBOT_CONFIGS[name].canonical_joints)
-            for name in self.humanoids_list
-        }
-        cfg.action_space = num_joints
-        cfg.observation_space = {name: 12 + 3 * n + num_scan for name, n in num_joints.items()}
+        self._setup_spaces(cfg)
 
         super().__init__(cfg, render_mode, **kwargs)
 
@@ -128,8 +125,8 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         for robot_name in self.humanoids_list:
             sensor = self.robot_sensors[robot_name]
             contact_bodies = "torso"
-            if robot_name in ROBOT_CONFIGS:
-                cfg_r = ROBOT_CONFIGS[robot_name]
+            if robot_name in self.robot_configs:
+                cfg_r = self.robot_configs[robot_name]
                 if cfg_r.illegal_contact_bodies is not None:
                     contact_bodies = cfg_r.illegal_contact_bodies
                 else:
@@ -154,15 +151,25 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         print("\n[INFO] generating action/observation mappings for biped humanoids...")
         self._setup_joint_mappings()
 
+    def _setup_spaces(self, cfg):
+        """Per-robot sizes: 12 base values + joint pos, joint vel and last action for each of its own joints."""
+        num_scan = 187 if getattr(cfg, "include_height_scanners", False) else 0
+        num_joints = {
+            name: sum(joint is not None for joint in self.robot_configs[name].canonical_joints)
+            for name in self.humanoids_list
+        }
+        cfg.action_space = num_joints
+        cfg.observation_space = {name: 12 + 3 * n + num_scan for name, n in num_joints.items()}
+
     def _setup_joint_mappings(self):
-        """Find each robot's controlled joints (listed in ROBOT_CONFIGS), kept in the robot's own joint order."""
+        """Find each robot's controlled joints (listed in robot_configs), kept in the robot's own joint order."""
         self.physical_joint_indices = {}
 
         for robot_name, robot in self.robots.items():
-            if robot_name not in ROBOT_CONFIGS:
-                raise ValueError(f"Robot '{robot_name}' not found in ROBOT_CONFIGS.")
+            if robot_name not in self.robot_configs:
+                raise ValueError(f"Robot '{robot_name}' not found in robot_configs.")
 
-            config = ROBOT_CONFIGS[robot_name]
+            config = self.robot_configs[robot_name]
             joint_names = robot.data.joint_names
 
             physical_joints = []
@@ -299,7 +306,7 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
         for robot_name, robot in self.robots.items():
             phys_idx = self.physical_joint_indices[robot_name]
 
-            config_scale = ROBOT_CONFIGS[robot_name].action_scale
+            config_scale = self.robot_configs[robot_name].action_scale
             action_scale = getattr(
                 self.cfg, f"action_scale_{robot_name}", getattr(self.cfg, "action_scale", config_scale)
             )
@@ -390,8 +397,8 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
         base_orientation = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         for robot_name, robot in self.robots.items():
-            if robot_name in ROBOT_CONFIGS:
-                limit_angle = ROBOT_CONFIGS[robot_name].orientation_limit
+            if robot_name in self.robot_configs:
+                limit_angle = self.robot_configs[robot_name].orientation_limit
                 if limit_angle is not None:
                     env_ids = self.robot_env_ids[robot_name]
                     projected_gravity_z = robot.data.projected_gravity_b[:, 2]
@@ -404,8 +411,8 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
         root_height = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         for robot_name, robot in self.robots.items():
-            if robot_name in ROBOT_CONFIGS:
-                min_h = ROBOT_CONFIGS[robot_name].min_root_height
+            if robot_name in self.robot_configs:
+                min_h = self.robot_configs[robot_name].min_root_height
                 if min_h is not None:
                     env_ids = self.robot_env_ids[robot_name]
                     terminated_robot = robot.data.root_pos_w[:, 2] < min_h
@@ -660,8 +667,8 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             base_mass_range = getattr(self.cfg, f"base_mass_range_{robot_name}", self.cfg.base_mass_range_small)
 
             base_link_name = "torso"
-            if robot_name in ROBOT_CONFIGS:
-                base_link_name = ROBOT_CONFIGS[robot_name].base_link
+            if robot_name in self.robot_configs:
+                base_link_name = self.robot_configs[robot_name].base_link
 
             # Check per-robot mass randomization flag (default to global if not explicitly set)
             randomize_mass = getattr(
