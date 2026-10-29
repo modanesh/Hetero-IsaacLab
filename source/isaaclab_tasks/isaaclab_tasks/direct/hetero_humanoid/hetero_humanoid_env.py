@@ -82,6 +82,8 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
             ids.sort()
             self.robot_env_ids[robot_name] = torch.tensor(ids, device=self.device)
 
+        self._spread_terrain_types()
+
         # the base class batches every space with num_envs; each robot has only its own envs
         self.observation_space = gym.spaces.Dict({
             name: gym.vector.utils.batch_space(self.single_observation_space["policy"][name], len(ids))
@@ -150,6 +152,24 @@ class HeterogeneousHumanoidVelocityEnv(DirectRLEnv):
 
         print("\n[INFO] generating action/observation mappings for biped humanoids...")
         self._setup_joint_mappings()
+
+    def _spread_terrain_types(self):
+        """Give each robot's envs every terrain column, in the proportions a one-robot env would have.
+
+        The terrain importer puts env i on column floor(i / (num_envs / num_cols)), and each robot holds one
+        contiguous block of env ids, so each robot otherwise only ever sees the few columns its block covers
+        (with ANYmal-D, -C, -B: ANYmal-D stairs only, ANYmal-B rough ground and slopes only). Spawn levels are kept.
+        """
+        terrain = self.scene.terrain
+        if getattr(terrain, "terrain_origins", None) is None:
+            return
+        num_cols = terrain.terrain_origins.shape[1]
+        for env_ids in self.robot_env_ids.values():
+            n = len(env_ids)
+            terrain.terrain_types[env_ids] = torch.div(
+                torch.arange(n, device=self.device), n / num_cols, rounding_mode="floor"
+            ).to(torch.long)
+        terrain.env_origins[:] = terrain.terrain_origins[terrain.terrain_levels, terrain.terrain_types]
 
     def _setup_spaces(self, cfg):
         """Per-robot sizes: 12 base values + joint pos, joint vel and last action for each of its own joints."""
